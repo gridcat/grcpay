@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model wallets {
+  id              BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  address         String        @db.VarChar(36)
+  recipient       String?       @db.VarChar(36)
+  amount_required Float         @db.Float
+  amount_recieved Float         @db.Float
+  status          WalletStatus
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  @@index([address], name: "wallet_address")
+  @@index([amount_recieved, status], name: "amount_status")
+  @@index([created_at, status], name: "created_status")
+  @@index([status], name: "status")
+}
+
+model logs {
+  id              BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  wallet_id       BigInt        @db.UnsignedBigInt
+  action          String?       @db.VarChar(64)
+  old_status      String?       @db.VarChar(64)
+  new_status      String?       @db.VarChar(64)
+  created_at      DateTime      @default(now())
+}
+
+enum WalletStatus {
+  new // Newly created wallet
+  funded // Wallet has been fully funded with a desire amount
+  error // Error state
+  expired // Wallet has not been funded in time, some balance might be still present
+  processed // Everything gets processed, funds either has been sent to the destination or left intact (if destination wasn't specified)
+  refunded // Wallet gets fully refunded
+}
