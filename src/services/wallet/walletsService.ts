@@ -1,47 +1,58 @@
 import { subSeconds } from 'date-fns';
-import { WalletStatus } from '@prisma/client';
+import { Prisma, WalletStatus } from '@prisma/client';
 import { Wallet } from '../../models/Wallet';
-import { rpc } from '../../lib/gridcoin';
 import { config } from '../../config';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
+import { getPrisma } from '../../lib/prisma';
 
 export class WalletsServiceClass {
   constructor(
     private wallet = new Wallet(),
-    private grcRpc = rpc,
   ) {}
 
-  public async updateBalances(): Promise<void> {
-    log.info('Check open wallets balances');
-    const openWallets = await this.wallet.model.findMany({
-      select: { id: true, address: true },
-      where: {
-        status: WalletStatus.new,
-      },
-    });
-    if (!openWallets.length) {
-      return;
-    }
-    for (let i = 0; i < openWallets.length; i++) {
-      const wallet = openWallets[i];
-      console.log(`Check balance for ${wallet.address}`);
-      // const balance = await this.getBalance(wallet.address);
-      const balance = await this.grcRpc.getBalance(wallet.address);
-      console.log(balance);
-    }
-  }
-
   /**
-   * Useles?
-   * @deprecated
-   * @param address
-   * @returns
+   * Find wallets which has received more or exact amount which is required
+   * Mark those wallets as funded
    */
-  private async getBalance(address: string): Promise<number> {
-    const balance = await this.grcRpc.getBalance(address);
-    return balance;
+  public async findFundedWallets(): Promise<void> {
+    log.info('Check for the funded wallets');
+    // const status = WalletStatus.new;
+    const fundedWallets = await getPrisma().$queryRaw<{id: bigint, status: string}[]>(Prisma.sql`
+      SELECT
+        id,
+        status
+      FROM wallets
+      WHERE
+        status IN (${WalletStatus.new})
+        AND amount_recieved >= amount_required
+    `);
+    const ids = fundedWallets.reduce((prev: bigint[], curr: { id: bigint }) => {
+      prev.push(curr.id);
+      return prev;
+    }, []);
+    if (ids.length) {
+      log.info(`${ids.length} wallet(s) to be marked as funded`);
+      await this.wallet.model.updateMany({
+        data: {
+          status: WalletStatus.funded,
+        },
+        where: {
+          id: {
+            in: ids,
+          },
+        },
+      });
+    }
+    fundedWallets.forEach((wallet) => {
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: wallet.id,
+        action: 'status',
+        oldStatus: wallet.status,
+        newStatus: WalletStatus.funded,
+      });
+    });
   }
 
   /**

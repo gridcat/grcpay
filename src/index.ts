@@ -2,6 +2,7 @@ import { config } from './config';
 import { connect } from './lib/gridcoin';
 import { log } from './lib/log';
 import { WalletsService } from './services/wallet/walletsService';
+import { WalletsBalanceUpdaterService } from './services/wallet/walletsBalanceUpdater';
 import { DbLogService } from './services/dbLog/dbLogService';
 import './api';
 
@@ -27,7 +28,15 @@ async function main(): Promise<void> {
     () => WalletsService.expireWallets(),
     config.EXPIRED_JOB_INTERVAL * 1000, // Turn it to ms
   );
-  await WalletsService.updateBalances();
+  setInterval(
+    () => WalletsBalanceUpdaterService.updateBalances(),
+    (config.EXPIRED_JOB_INTERVAL + 3) * 1000, // Turn it to ms
+  );
+  setInterval(
+    () => WalletsService.findFundedWallets(),
+    (config.EXPIRED_JOB_INTERVAL + 6) * 1000, // Turn it to ms
+  );
+  // await WalletsService.updateBalances();
 }
 
 main();

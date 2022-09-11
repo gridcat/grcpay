@@ -1,6 +1,7 @@
 import { WalletStatus } from '@prisma/client';
 import { Wallet } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
+import { config } from '../../config';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 
@@ -33,9 +34,11 @@ export class WalletsCreatorServiceClass {
       throw new Error('Unable to generate new address');
     }
 
+    const amountRequiredHalford = amountRequired * config.HALFORD;
+
     const newWallet = await this.wallet.model.create({
       data: {
-        amount_required: amountRequired,
+        amount_required: amountRequiredHalford,
         amount_recieved: 0,
         status: WalletStatus.new,
         address,
@@ -47,7 +50,7 @@ export class WalletsCreatorServiceClass {
     getEventEmitter<DbLogMessage>().emit('log', {
       walletId: newWallet.id,
       action: 'amount_required',
-      newStatus: String(amountRequired),
+      newStatus: String(amountRequiredHalford),
     });
     getEventEmitter<DbLogMessage>().emit('log', {
       walletId: newWallet.id,

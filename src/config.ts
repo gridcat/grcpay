@@ -15,6 +15,7 @@ interface Config {
   PORT: number;
   LIFE_SPAN: number;
   EXPIRED_JOB_INTERVAL: number;
+  HALFORD: number;
 }
 
 /**
@@ -66,6 +67,7 @@ nconf
     // Check for the expirations once a minute
     // EXPIRED_JOB_INTERVAL: 1 * 60,
     EXPIRED_JOB_INTERVAL: 1 * 10,
+    HALFORD: 100000000,
   });
 
 // Check required settings
