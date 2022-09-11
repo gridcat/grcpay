@@ -39,5 +39,6 @@ enum WalletStatus {
   error // Error state
   expired // Wallet has not been funded in time, some balance might be still present
   processed // Everything gets processed, funds either has been sent to the destination or left intact (if destination wasn't specified)
-  refunded // Wallet gets fully refunded
+  refunded // Wallet gets fully refunded after expiration
+  norefund // Wallet expired, but refund is not done as no fund were sent to the wallet
 }
