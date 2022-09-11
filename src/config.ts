@@ -64,7 +64,8 @@ nconf
     PORT: packageJson.port,
     LIFE_SPAN: 1 * 60 * 60 * 2, // 2 hours :-)
     // Check for the expirations once a minute
-    EXPIRED_JOB_INTERVAL: 1 * 60,
+    // EXPIRED_JOB_INTERVAL: 1 * 60,
+    EXPIRED_JOB_INTERVAL: 1 * 10,
   });
 
 // Check required settings

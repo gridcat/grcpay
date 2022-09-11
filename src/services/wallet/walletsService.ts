@@ -4,6 +4,8 @@ import { Wallet } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
 import { config } from '../../config';
 import { log } from '../../lib/log';
+import { getEventEmitter } from '../../lib/event';
+import { DbLogMessage } from '../dbLog/dbLogService';
 
 export class WalletsServiceClass {
   constructor(
@@ -53,7 +55,7 @@ export class WalletsServiceClass {
     log.info('Check for expired wallets');
     const span = subSeconds(Date.now(), config.LIFE_SPAN);
     const openedWallets = await this.wallet.model.findMany({
-      select: { id: true },
+      select: { id: true, status: true },
       where: {
         created_at: {
           lte: span,
@@ -83,6 +85,14 @@ export class WalletsServiceClass {
             in: ids,
           },
         },
+      });
+      openedWallets.forEach((wallet) => {
+        getEventEmitter<DbLogMessage>().emit('log', {
+          walletId: wallet.id,
+          action: 'status',
+          oldStatus: wallet.status,
+          newStatus: WalletStatus.expired,
+        });
       });
     }
   }

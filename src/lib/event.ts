@@ -1,5 +1,12 @@
 import EventEmitter from 'events';
 
+type Types = 'log' | 'log';
+
 const eventEmitter = new EventEmitter();
 
-export const getEventEmitter = () => eventEmitter;
+export function getEventEmitter<T>(): {
+  on: (a: Types, b: (c: T) => unknown) => unknown,
+  emit: (a: Types, b: T) => unknown,
+  } {
+  return eventEmitter;
+}

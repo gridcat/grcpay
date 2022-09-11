@@ -24,7 +24,7 @@ model wallets {
   @@index([status], name: "status")
 }
 
-model logs {
+model db_logs {
   id              BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
   wallet_id       BigInt        @db.UnsignedBigInt
   action          String?       @db.VarChar(64)
