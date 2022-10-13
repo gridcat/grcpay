@@ -13,9 +13,10 @@ export class WalletPresenter extends Presenter {
     return {
       address: instanse.address,
       recipient: instanse.recipient,
-      amountRequired: instanse.amount_required,
-      amountRecieved: instanse.amount_recieved,
+      amountRequired: (instanse.amount_required).toString(),
+      amountRecieved: instanse.amount_recieved.toString(),
       status: instanse.status,
+      qr: instanse.qr,
       createdAt: instanse.created_at,
       updatedAt: instanse.updated_at,
     };

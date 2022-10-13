@@ -1,4 +1,4 @@
-import { WalletStatus } from '@prisma/client';
+import { wallets, WalletStatus } from '@prisma/client';
 import { Wallet } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
 import { config } from '../../config';
@@ -29,10 +29,16 @@ export class WalletExpiredProcessorServiceClass {
   public async processExpired(): Promise<void> {
     log.info('Process expired wallets');
     // Process those with empty balance first
-    await this.processWitZeroBalance();
+    await this.processWithZeroBalance();
+    await this.processWithBalance();
   }
 
-  private async processWitZeroBalance(): Promise<void> {
+  /**
+   * A bit overcomplicated, as I Want to send logs too
+   * Get all expired wallets with empty balance and mark it as norefund
+   */
+  private async processWithZeroBalance(): Promise<void> {
+    log.info('Process expired empty wallets');
     const expiredEmptyWallets = await this.wallet.model.findMany({
       select: { id: true },
       where: {
@@ -40,7 +46,6 @@ export class WalletExpiredProcessorServiceClass {
         amount_recieved: 0,
       },
     });
-    console.log(expiredEmptyWallets);
     const ids = expiredEmptyWallets.reduce((prev: bigint[], curr: { id: bigint }) => {
       prev.push(curr.id);
       return prev;
@@ -65,6 +70,26 @@ export class WalletExpiredProcessorServiceClass {
           newStatus: WalletStatus.norefund,
         });
       });
+    }
+  }
+
+  private async processWithBalance(): Promise<void> {
+    log.info('Process expired wallets with non-empty balance');
+    const expiredWallets = await this.wallet.model.findMany({
+      where: {
+        status: WalletStatus.expired,
+        amount_recieved: {
+          gt: 0,
+        },
+      },
+    });
+    for (let i = 0; i < expiredWallets.length; i++) {
+      const wallet = expiredWallets[i];
+      log.info(`${wallet.address} is about to be refunded one day`);
+      // get transactions for this address
+      // @todo I do not know where to send money
+      // perhaps I leave it as is and will wait for the API to be ready
+      // Later on I can send things back, by checking who sent what via API
     }
   }
 }

@@ -19,6 +19,8 @@ export class Wallet implements GenericInterface {
 
   public status: WalletStatus;
 
+  public qr?: string;
+
   public attributes = [
     'id',
     'createdAt',
@@ -30,6 +32,10 @@ export class Wallet implements GenericInterface {
     'amountRecieved',
     'status',
   ];
+
+  public fromModel(): void {
+
+  }
 
   constructor(public model = getPrisma().wallets) {}
 }

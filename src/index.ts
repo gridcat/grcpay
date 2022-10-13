@@ -6,6 +6,7 @@ import { WalletsBalanceUpdaterService } from './services/wallet/walletsBalanceUp
 import { DbLogService } from './services/dbLog/dbLogService';
 import './api';
 import { WalletExpiredProcessorService } from './services/wallet/walletExpiredProcessorService';
+import { WalletFundedProcessorService } from './services/wallet/walletFundedProcessorService';
 
 async function initConnections(): Promise<void> {
   while (!await connect()) {
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
       // Mark expired wallets
       .then(() => WalletsService.expireWallets())
       // Process funded wallets (send change back, send to recipient)
+      .then(() => WalletFundedProcessorService.processFunded())
       // Process expired wallets (send amount back if any)
       .then(() => WalletExpiredProcessorService.processExpired())
       .then(() => console.log('-------------------------')),

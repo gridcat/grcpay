@@ -16,6 +16,7 @@ interface Config {
   LIFE_SPAN: number;
   JOBS_INTERVAL: number;
   HALFORD: number;
+  MIN_FEE: number;
 }
 
 /**
@@ -68,6 +69,7 @@ nconf
     // EXPIRED_JOB_INTERVAL: 1 * 60,
     JOBS_INTERVAL: 1 * 10,
     HALFORD: 100000000,
+    MIN_FEE: 0.001,
   });
 
 // Check required settings

@@ -4,11 +4,13 @@ import { rpc } from '../../lib/gridcoin';
 import { config } from '../../config';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
+import { QrCodeService } from '../qr/qrCodeService';
 
 export class WalletsCreatorServiceClass {
   constructor(
     private wallet = new Wallet(),
     private grcRpc = rpc,
+    private qrCodeService = new QrCodeService(),
   ) {}
 
   public async createWallet(
@@ -43,6 +45,7 @@ export class WalletsCreatorServiceClass {
         status: WalletStatus.new,
         address,
         recipient,
+        qr: (await this.qrCodeService.generateQrCode(address, amountRequired)),
       },
     });
 
