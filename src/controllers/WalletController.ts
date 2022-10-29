@@ -1,7 +1,6 @@
 import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 import { Request, Response } from 'express';
 import yayson from 'yayson';
-import { wallets } from '@prisma/client';
 import { Controller } from './BaseController';
 import { WalletPresenter } from '../presenters/wallet.presenter';
 import { Wallet } from '../models/Wallet';
@@ -30,7 +29,7 @@ export class WalletController extends Controller {
     if (result) {
       this.res
         .status(StatusCodes.OK)
-        .send(this.render<wallets>(result));
+        .send(this.render<Wallet>(result));
     } else {
       this.res
         .status(StatusCodes.NOT_FOUND)
@@ -51,7 +50,6 @@ export class WalletController extends Controller {
 
     try {
       data = store.sync(input);
-      // console.log(data);
       const result = WalletSchema.validate(data);
       if (result.error && result.error.details) {
         throw new Error(result.error.details[0].message);
@@ -79,6 +77,6 @@ export class WalletController extends Controller {
 
     this.res
       .status(StatusCodes.CREATED)
-      .send(this.render<wallets>(result));
+      .send(this.render<Wallet>(result));
   }
 }

@@ -1,5 +1,6 @@
 import { wallets } from '@prisma/client';
 import yayson from 'yayson';
+import { Wallet } from '../models/Wallet';
 import { Attributes } from './types';
 
 const { Presenter } = yayson();
@@ -9,16 +10,15 @@ export class WalletPresenter extends Presenter {
     return `/wallets/${this.id(instance)}`;
   }
 
-  public attributes(instanse: wallets): Attributes {
+  public attributes(instanse: Wallet): Attributes {
     return {
       address: instanse.address,
       recipient: instanse.recipient,
-      amountRequired: (instanse.amount_required).toString(),
-      amountRecieved: instanse.amount_recieved.toString(),
+      amountRequired: (instanse.amountRequired).toString(),
+      amountRecieved: instanse.amountRecieved.toString(),
       status: instanse.status,
-      qr: instanse.qr,
-      createdAt: instanse.created_at,
-      updatedAt: instanse.updated_at,
+      createdAt: instanse.createdAt,
+      updatedAt: instanse.updatedAt,
     };
   }
 

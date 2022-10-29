@@ -16,7 +16,6 @@ model wallets {
   amount_recieved BigInt        @db.UnsignedBigInt
   status          WalletStatus
   tx_out          String?       @db.VarChar(64)
-  qr              String?       @db.Text
   created_at      DateTime      @default(now())
   updated_at      DateTime      @updatedAt
 

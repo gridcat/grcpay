@@ -7,7 +7,8 @@ const {
 const console = new transports.Console();
 
 export const log = createLogger({
-  level: 'debug',
+  // level: 'debug',
+  level: 'warning',
   format: combine(
     timestamp(),
     prettyPrint(),

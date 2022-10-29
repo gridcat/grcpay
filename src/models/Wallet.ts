@@ -1,9 +1,9 @@
-import { WalletStatus } from '@prisma/client';
+import { wallets, WalletStatus } from '@prisma/client';
 import { getPrisma } from '../lib/prisma';
 import { GenericInterface } from './Generic';
 
 export class Wallet implements GenericInterface {
-  public id?: number;
+  public id?: BigInt;
 
   public createdAt?: Date;
 
@@ -13,9 +13,11 @@ export class Wallet implements GenericInterface {
 
   public recipient: string;
 
-  public amountRequired: number;
+  public amountRequired: BigInt;
 
-  public amountRecieved: number;
+  public amountRecieved: BigInt;
+
+  public txOut?: string;
 
   public status: WalletStatus;
 
@@ -33,8 +35,18 @@ export class Wallet implements GenericInterface {
     'status',
   ];
 
-  public fromModel(): void {
-
+  public static fromModel(wallet: wallets): Wallet {
+    const walletObj = new Wallet();
+    walletObj.address = wallet.address;
+    walletObj.amountRecieved = wallet.amount_recieved;
+    walletObj.amountRequired = wallet.amount_required;
+    walletObj.createdAt = wallet.created_at;
+    walletObj.id = wallet.id;
+    walletObj.recipient = wallet.recipient;
+    walletObj.status = wallet.status;
+    walletObj.txOut = wallet.tx_out;
+    walletObj.updatedAt = wallet.updated_at;
+    return walletObj;
   }
 
   constructor(public model = getPrisma().wallets) {}

@@ -1,5 +1,5 @@
 export interface GenericInterface {
-  id?: number;
+  id?: BigInt;
   createdAt?: Date;
   updatedAt?: Date;
   attributes: string[];

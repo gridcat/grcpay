@@ -5,15 +5,15 @@ export class WalletsFinderServiceClass {
     private wallet = new Wallet(),
   ) {}
 
-  public async findWalletByAddress(address: string) {
+  public async findWalletByAddress(address: string): Promise<Wallet> {
     if (!address) {
       throw new Error('Address is required');
     }
-    return this.wallet.model.findFirst({
+    return Wallet.fromModel(await this.wallet.model.findFirst({
       where: {
         address,
       },
-    });
+    }));
   }
 }
 

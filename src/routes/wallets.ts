@@ -1,12 +1,13 @@
 import { Request, Response, Router } from 'express';
+import { QrController } from '../controllers/QrController';
 import { WalletController } from '../controllers/WalletController';
 
 export const walletsRouter = Router();
 
-// stampsRouter.get('/', async (req: Request, res: Response) => {
-//   const controller = new StampsController(req, res);
-//   return controller.listStamps();
-// });
+walletsRouter.get('/:id/qr', async (req: Request, res: Response) => {
+  const controller = new QrController(req, res);
+  return controller.getQrByAddress(req.params.id);
+});
 
 walletsRouter.get('/:id', async (req: Request, res: Response) => {
   const controller = new WalletController(req, res);
