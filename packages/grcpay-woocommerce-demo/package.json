@@ -1,0 +1,11 @@
+{
+  "name": "grcpay-woocommerce-demo",
+  "description": "Fresh WordPress + WooCommerce install used as a live demo for the grcpay-woocommerce plugin.",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test:lint": "echo 'no JS/TS to lint' && exit 0",
+    "typecheck": "echo 'no TS to check' && exit 0"
+  }
+}

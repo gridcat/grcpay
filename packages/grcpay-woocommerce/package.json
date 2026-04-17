@@ -1,0 +1,26 @@
+{
+  "name": "grcpay-woocommerce",
+  "description": "WooCommerce payment gateway plugin for Gridcoin (GRC), powered by grcpay.",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "author": "gridcat",
+  "homepage": "https://grcpay.gridcoin.club",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gridcat/gridcoin.club.git",
+    "directory": "grcpay.gridcoin.club/packages/grcpay-woocommerce"
+  },
+  "release": {
+    "tagFormat": "grcpay-woocommerce-v${version}"
+  },
+  "scripts": {
+    "build": "./scripts/build-zip.sh",
+    "clean": "rm -rf dist",
+    "test": "./scripts/test.sh",
+    "test:coverage": "./scripts/test.sh test:coverage",
+    "test:install": "./scripts/test.sh install",
+    "test:lint": "echo 'no JS/TS to lint' && exit 0",
+    "typecheck": "echo 'no TS to check' && exit 0"
+  }
+}

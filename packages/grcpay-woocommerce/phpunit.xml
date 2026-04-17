@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheResultFile=".phpunit.result.cache"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutTestsThatDoNotTestAnything="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         verbose="true">
+    <testsuites>
+        <testsuite name="grcpay-woocommerce">
+            <directory>tests</directory>
+            <exclude>tests/bootstrap.php</exclude>
+            <exclude>tests/stubs</exclude>
+        </testsuite>
+    </testsuites>
+    <coverage processUncoveredFiles="true">
+        <include>
+            <directory suffix=".php">plugin</directory>
+        </include>
+        <exclude>
+            <directory suffix=".php">plugin/languages</directory>
+        </exclude>
+    </coverage>
+</phpunit>

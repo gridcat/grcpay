@@ -1,0 +1,363 @@
+version: 2.1
+
+defaults: &defaults
+  working_directory: ~/app
+  docker:
+    - image: cimg/node:22.16
+
+jobs:
+  install-and-detect:
+    <<: *defaults
+    environment:
+      PIPELINE_BASE_REVISION: << pipeline.git.base_revision >>
+    steps:
+      - checkout
+      - run:
+          name: Fetch full history and tags for Nx affected comparison
+          command: |
+            # Unshallow so `git describe` can walk back to release tags.
+            # Falls back to a plain fetch if the clone is already complete.
+            git fetch --tags --unshallow origin master:refs/remotes/origin/master 2>/dev/null || \
+              git fetch --tags origin master:refs/remotes/origin/master
+      - restore_cache:
+          keys:
+            - v1-root-deps-{{ checksum "package-lock.json" }}
+      - restore_cache:
+          keys:
+            - v1-grcpay-deps-{{ checksum "packages/grcpay/package-lock.json" }}
+      - restore_cache:
+          keys:
+            - v1-grcpay-frontend-deps-{{ checksum "packages/grcpay-frontend/package-lock.json" }}
+      - run:
+          name: Install root dependencies
+          command: |
+            HASH=$(sha256sum package-lock.json | awk '{print $1}')
+            if [ -f node_modules/.lockfile-hash ] && [ "$(cat node_modules/.lockfile-hash)" = "$HASH" ]; then
+              echo "Root deps cache hit — skipping install"
+            else
+              npm ci
+              echo "$HASH" > node_modules/.lockfile-hash
+            fi
+      - run:
+          name: Install grcpay dependencies
+          command: |
+            cd ~/app/packages/grcpay
+            HASH=$(sha256sum package-lock.json | awk '{print $1}')
+            if [ -f node_modules/.lockfile-hash ] && [ "$(cat node_modules/.lockfile-hash)" = "$HASH" ]; then
+              echo "grcpay deps cache hit — skipping install"
+            else
+              npm ci
+              echo "$HASH" > node_modules/.lockfile-hash
+            fi
+      - run:
+          name: Install grcpay-frontend dependencies
+          command: |
+            cd ~/app/packages/grcpay-frontend
+            HASH=$(sha256sum package-lock.json | awk '{print $1}')
+            if [ -f node_modules/.lockfile-hash ] && [ "$(cat node_modules/.lockfile-hash)" = "$HASH" ]; then
+              echo "grcpay-frontend deps cache hit — skipping install"
+            else
+              npm ci
+              echo "$HASH" > node_modules/.lockfile-hash
+            fi
+      - save_cache:
+          key: v1-root-deps-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/app/node_modules
+      - save_cache:
+          key: v1-grcpay-deps-{{ checksum "packages/grcpay/package-lock.json" }}
+          paths:
+            - ~/app/packages/grcpay/node_modules
+      - save_cache:
+          key: v1-grcpay-frontend-deps-{{ checksum "packages/grcpay-frontend/package-lock.json" }}
+          paths:
+            - ~/app/packages/grcpay-frontend/node_modules
+      - run:
+          name: Detect affected projects
+          command: |
+            mkdir -p ~/app/.affected
+
+            # Compare against the previous CI run on this branch.
+            # Release jobs on master always run (semantic-release decides
+            # whether to publish), so this only gates check/test jobs.
+            check_affected() {
+              local project="$1"
+              local base
+
+              if [ -n "$PIPELINE_BASE_REVISION" ]; then
+                base="$PIPELINE_BASE_REVISION"
+              else
+                base="origin/master"
+              fi
+
+              echo "Checking $project against base: $base"
+              local affected
+              affected=$(npx nx show projects --affected --base="$base" --head=HEAD 2>/dev/null) || {
+                echo "  WARNING: affected detection failed (base=$base), marking $project as affected"
+                echo "true" > ~/app/.affected/"$project"
+                return
+              }
+              echo "  affected projects in range: $affected"
+              if echo "$affected" | grep -qw "$project"; then
+                echo "true" > ~/app/.affected/"$project"
+              else
+                echo "false" > ~/app/.affected/"$project"
+              fi
+              echo "  $project affected: $(cat ~/app/.affected/"$project")"
+            }
+
+            check_affected grcpay
+            check_affected grcpay-frontend
+      - persist_to_workspace:
+          root: ~/app
+          paths: .
+
+  grcpay-checks:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/app
+      - run:
+          name: Check if grcpay is affected
+          command: |
+            FLAG=$(cat ~/app/.affected/grcpay 2>/dev/null || echo "false")
+            if [ "$FLAG" != "true" ]; then
+              echo "grcpay not affected, skipping"
+              circleci-agent step halt
+            fi
+      - run:
+          name: Run lint
+          command: cd ~/app/packages/grcpay && npm run test:lint
+      - run:
+          name: Run typecheck
+          command: cd ~/app/packages/grcpay && npm run typecheck
+      - run:
+          name: Run unit tests
+          command: cd ~/app/packages/grcpay && npm run test:unit
+      - run:
+          name: Run integration tests
+          command: cd ~/app/packages/grcpay && npm run test:integration
+
+  grcpay-frontend-checks:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/app
+      - run:
+          name: Check if grcpay-frontend is affected
+          command: |
+            FLAG=$(cat ~/app/.affected/grcpay-frontend 2>/dev/null || echo "false")
+            if [ "$FLAG" != "true" ]; then
+              echo "grcpay-frontend not affected, skipping"
+              circleci-agent step halt
+            fi
+      - run:
+          name: Run lint
+          command: cd ~/app/packages/grcpay-frontend && npm run test:lint
+      - run:
+          name: Run typecheck
+          command: cd ~/app/packages/grcpay-frontend && npm run typecheck
+      - run:
+          name: Run unit tests
+          command: cd ~/app/packages/grcpay-frontend && npm run test:unit
+
+  # grcpay-woocommerce is a pure-PHP plugin — it doesn't participate
+  # in the Nx affected detection the Node packages use, because Nx
+  # only knows about JS/TS projects. Rather than add custom affected
+  # detection for one package, this job always runs: PHPUnit takes
+  # ~5ms wall time so the cost is entirely the PHP cold start +
+  # Composer install, which is dwarfed by the Node jobs and doesn't
+  # gate the release workflow.
+  #
+  # Deliberately decoupled from install-and-detect: no workspace
+  # attach (we don't need the Node install), no Nx flag read. Fresh
+  # PHP container, fresh checkout, fresh vendor/ (cached by the
+  # composer.lock checksum).
+  grcpay-woocommerce-checks:
+    working_directory: ~/app
+    docker:
+      - image: cimg/php:8.3
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-grcpay-woocommerce-composer-{{ checksum "packages/grcpay-woocommerce/composer.lock" }}
+      - run:
+          name: Install PHP dependencies
+          command: cd ~/app/packages/grcpay-woocommerce && composer install --no-interaction --no-progress --prefer-dist
+      - save_cache:
+          key: v1-grcpay-woocommerce-composer-{{ checksum "packages/grcpay-woocommerce/composer.lock" }}
+          paths:
+            - ~/app/packages/grcpay-woocommerce/vendor
+      - run:
+          name: Run PHPUnit
+          command: cd ~/app/packages/grcpay-woocommerce && composer test
+
+  grcpay-release:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/app
+      - run:
+          name: Trust SSH key
+          command: mkdir -p ~/.ssh/ && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
+      - run:
+          name: Semantic release
+          command: cd ~/app/packages/grcpay && npm run semantic-release
+
+  grcpay-frontend-release:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/app
+      - run:
+          name: Trust SSH key
+          command: mkdir -p ~/.ssh/ && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
+      - run:
+          name: Semantic release
+          command: cd ~/app/packages/grcpay-frontend && npm run semantic-release
+
+  grcpay_build_image:
+    <<: *defaults
+    docker:
+      - image: docker:git
+    steps:
+      - checkout
+      - run:
+          name: Get the recent changes
+          command: git pull origin master
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Install dependencies
+          command: apk add --no-cache jq
+      - restore_cache:
+          keys:
+            - v1-{{ .Branch }}
+          paths:
+            - /caches/grcpay.tar
+      - run:
+          name: Load Docker image layer cache
+          command: |
+            set +o pipefail
+            docker load -i /caches/grcpay.tar | true
+      - run:
+          name: Build application Docker image
+          command: |
+            cd ~/app/packages/grcpay && docker build --cache-from=app -t app -f Dockerfile.prod .
+      - run:
+          name: Save Docker image layer cache
+          command: |
+            mkdir -p /caches
+            cd ~/app/packages/grcpay && docker save -o /caches/grcpay.tar app
+      - deploy:
+          name: Push application Docker image
+          command: |
+            cd ~/app/packages/grcpay
+            docker login ghcr.io -u gridcat -p${CR_PAT}
+            docker tag app "ghcr.io/gridcat/$(jq -r '.name' package.json):$(jq -r '.version' package.json)"
+            docker push "ghcr.io/gridcat/$(jq -r '.name' package.json):$(jq -r '.version' package.json)"
+            docker tag app "ghcr.io/gridcat/$(jq -r '.name' package.json):latest"
+            docker push "ghcr.io/gridcat/$(jq -r '.name' package.json):latest"
+
+  grcpay-frontend_build_image:
+    <<: *defaults
+    docker:
+      - image: docker:git
+    steps:
+      - checkout
+      - run:
+          name: Get the recent changes
+          command: git pull origin master
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Install dependencies
+          command: apk add --no-cache jq
+      - restore_cache:
+          keys:
+            - v1-{{ .Branch }}
+          paths:
+            - /caches/grcpay-frontend.tar
+      - run:
+          name: Load Docker image layer cache
+          command: |
+            set +o pipefail
+            docker load -i /caches/grcpay-frontend.tar | true
+      - run:
+          name: Build application Docker image
+          command: |
+            cd ~/app/packages/grcpay-frontend && docker build --cache-from=app -t app .
+      - run:
+          name: Save Docker image layer cache
+          command: |
+            mkdir -p /caches
+            cd ~/app/packages/grcpay-frontend && docker save -o /caches/grcpay-frontend.tar app
+      - deploy:
+          name: Push application Docker image
+          command: |
+            cd ~/app/packages/grcpay-frontend
+            docker login ghcr.io -u gridcat -p${CR_PAT}
+            docker tag app "ghcr.io/gridcat/$(jq -r '.name' package.json):$(jq -r '.version' package.json)"
+            docker push "ghcr.io/gridcat/$(jq -r '.name' package.json):$(jq -r '.version' package.json)"
+            docker tag app "ghcr.io/gridcat/$(jq -r '.name' package.json):latest"
+            docker push "ghcr.io/gridcat/$(jq -r '.name' package.json):latest"
+
+workflows:
+  ci:
+    jobs:
+      - install-and-detect:
+          filters:
+            tags:
+              ignore: /.*/
+
+      - grcpay-checks:
+          requires:
+            - install-and-detect
+
+      - grcpay-frontend-checks:
+          requires:
+            - install-and-detect
+
+      # grcpay-woocommerce is intentionally NOT gated on
+      # install-and-detect — it runs a PHP toolchain in its own
+      # container and shares nothing with the Node workspace, so
+      # decoupling it means (a) it can start in parallel without
+      # waiting for the Nx detect step, and (b) a broken detect
+      # step doesn't take down plugin tests too.
+      - grcpay-woocommerce-checks:
+          filters:
+            tags:
+              ignore: /.*/
+
+      - grcpay-release:
+          requires:
+            - grcpay-checks
+          filters:
+            branches:
+              only: master
+
+      - grcpay-frontend-release:
+          requires:
+            - grcpay-frontend-checks
+          filters:
+            branches:
+              only: master
+
+  grcpay_deploy-tag:
+    jobs:
+      - grcpay_build_image:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^grcpay-v.*/
+
+  grcpay-frontend_deploy-tag:
+    jobs:
+      - grcpay-frontend_build_image:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^grcpay-frontend-v.*/
