@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace CryptAPI\Tests;
+namespace Grcpay\Tests;
 
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
-use WC_CryptAPI_Gateway;
+use WC_Grcpay_Gateway;
 
 /**
- * Exhaustive tests for `WC_CryptAPI_Gateway::is_insecure_api_url()`.
+ * Exhaustive tests for `WC_Grcpay_Gateway::is_insecure_api_url()`.
  *
  * This is the security-critical URL classifier that blocks checkout
  * whenever the merchant has configured a plaintext HTTP endpoint
@@ -31,7 +31,7 @@ final class InsecureApiUrlTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->method = new ReflectionMethod(WC_CryptAPI_Gateway::class, 'is_insecure_api_url');
+        $this->method = new ReflectionMethod(WC_Grcpay_Gateway::class, 'is_insecure_api_url');
         $this->method->setAccessible(true);
     }
 

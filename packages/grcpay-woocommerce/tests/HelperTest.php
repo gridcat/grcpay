@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace CryptAPI\Tests;
+namespace Grcpay\Tests;
 
-use CryptAPI\Helper;
+use Grcpay\Helper;
 use PHPUnit\Framework\TestCase;
 
 /**

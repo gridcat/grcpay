@@ -1,301 +1,152 @@
-=== CryptAPI Payment Gateway for WooCommerce ===
-Contributors: cryptapi
-Tags: crypto payments, woocommerce, payment gateway, crypto, payment, pay with crypto, payment request, bitcoin, bnb, usdt, ethereum, monero, litecoin, bitcoin cash, shib, doge
-Requires at least: 5
-Tested up to: 6.0.2
-Stable tag: 4.6.4
-Requires PHP: 7.2
+=== Gridcoin Payment Gateway for WooCommerce ===
+Contributors: gridcat
+Tags: gridcoin, grc, woocommerce, payment gateway, cryptocurrency, crypto, payment, boinc
+Requires at least: 5.0
+Tested up to: 6.7
+Stable tag: 1.0.0
+Requires PHP: 7.4
 WC requires at least: 5.8
-WC tested up to: 6.9.4
+WC tested up to: 9.4
 License: MIT
 
-Accept cryptocurrency payments on your WooCommerce website
+
+Accept Gridcoin (GRC) payments on your WooCommerce store via grcpay.
 
 
 == Description ==
 
-Accept payments in Bitcoin, Ethereum, Bitcoin Cash, Litecoin, Monero, BNB, USDT, SHIB, DOGE and many more directly to your crypto wallet, without any sign-ups or lengthy processes.
-All you need is to provide your crypto address.
+Adds a "Gridcoin (GRC)" payment method to WooCommerce. The plugin talks to
+[grcpay](https://grcpay.gridcoin.club), an open-source payment proxy that
+mints a fresh receiving address per order, watches the chain for incoming
+funds, and forwards what it receives to your own Gridcoin wallet.
 
-= Allow users to pay with crypto directly on your store =
+= How it works =
 
-The CryptAPI plugin extends WooCommerce, allowing you to get paid in crypto directly on your store, with a simple setup and no sign-ups required.
+1. Customer picks **Gridcoin (GRC)** at checkout.
+2. The plugin asks grcpay to mint a per-order wallet for the order's GRC total.
+3. The customer is redirected to a thank-you page that shows the address,
+   a QR code, and a live-updating amount.
+4. The plugin polls grcpay every few seconds for the wallet status.
+5. Once grcpay confirms the funds, the WC order is marked paid; if the
+   payment window elapses with a partial balance, grcpay refunds the
+   sender automatically.
 
-= Accepted cryptocurrencies & tokens include: =
+The customer's funds settle directly to your Gridcoin wallet. grcpay never
+custodies the money — it only watches the address and forwards what it
+sees.
 
-* (BTC) Bitcoin
-* (ETH) Ethereum
-* (BCH) Bitcoin Cash
-* (LTC) Litecoin
-* (XMR) Monero
-* (TRX) Tron
-* (BNB) Binance Coin
-* (USDT) USDT
-* (SHIB) Shiba Inu
-* (DOGE) Dogecoin
+= No sign-up, no API key =
 
+You configure two things:
 
-among many others, for a full list of the supported cryptocurrencies and tokens, check [this page](https://cryptapi.io/pricing/).
+* The grcpay endpoint (the public `https://grcpay.gridcoin.club`, or your
+  own deployment).
+* Your own GRC receiving address.
 
-= Auto-value conversion =
+= Currency conversion =
 
-CryptAPI will attempt to automatically convert the value you set on your store to the cryptocurrency your customer chose.
+grcpay computes the GRC amount from your shop currency at order time using
+a 5-minute-cached CoinGecko rate. You can also point the plugin at
+grcpay's own `/rates` endpoint if you'd rather not call CoinGecko
+directly. The plugin **does not** convert GRC to fiat — settlement stays
+in GRC.
 
-Exchange rates are fetched every 5 minutes from CoinGecko.
+= Why Gridcoin? =
 
-Supported currencies for automatic exchange rates are:
+Gridcoin is a Proof-of-Research cryptocurrency that rewards BOINC volunteer
+computing. Spending GRC at a merchant gives the coin a real-world utility
+loop: science compute → block reward → checkout. This plugin is one of
+the merchant-side pieces of that loop.
 
-* (XAF) CFA Franc
-* (RON) Romanian Leu
-* (BGN) Bulgarian Lev
-* (HUF) Hungarian Forint
-* (CZK) Czech Koruna
-* (PHP) Philippine Peso
-* (PLN) Poland Zloti
-* (UGX) Uganda Shillings
-* (MXN) Mexican Peso
-* (INR) Indian Rupee
-* (HKD) Hong Kong Dollar
-* (CNY) Chinese Yuan
-* (BRL) Brazilian Real
-* (DKK) Danish Krone
-* (AED) UAE Dirham
-* (JPY) Japanese Yen
-* (CAD) Canadian Dollar
-* (GBP) GB Pound
-* (EUR) Euro
-* (USD) US Dollar
-
-If your WooCommerce's currency is none of the above, the exchange rates will default to USD.
-If you're using WooCommerce in a different currency not listed here and need support, please [contact us](https://cryptapi.io) via our live chat.
-
-**Note:** CryptAPI will not exchange your crypto for FIAT or other crypto, just convert the value
-
-= Why choose CryptAPI? =
-
-CryptAPI has no setup fees, no monthly fees, no hidden costs, and you don't even need to sign-up!
-Simply set your crypto addresses and you're ready to go. As soon as your customers pay we forward your earnings directly to your own wallet.
-
-CryptAPI has a low 1% fee on the transactions processed. No hidden costs.
-For more info on our fees [click here](https://cryptapi.io/get_started/#fees)
 
 == Installation ==
 
-= Using The WordPress Dashboard =
+= Upload via WordPress Dashboard =
 
-1. Navigate to the 'Add New' in the plugins dashboard
-2. Search for 'CryptAPI Payment Gateway for WooCommerce'
-3. Click 'Install Now'
-4. Activate the plugin on the Plugin dashboard
+1. Plugins → Add New → Upload Plugin.
+2. Choose `grcpay-woocommerce.zip`.
+3. Install Now → Activate.
 
-= Uploading in WordPress Dashboard =
+= Manually via FTP / SSH =
 
-1. Navigate to the 'Add New' in the plugins dashboard
-2. Navigate to the 'Upload' area
-3. Select `woocommerce-cryptapi.zip` from your computer
-4. Click 'Install Now'
-5. Activate the plugin in the Plugin dashboard
-
-= Using FTP =
-
-1. Download `woocommerce-cryptapi.zip`
-2. Extract the `woocommerce-cryptapi` directory to your computer
-3. Upload the `woocommerce-cryptapi` directory to the `/wp-content/plugins/` directory
-4. Activate the plugin in the Plugin dashboard
+1. Extract `grcpay-woocommerce.zip` and copy the contents into
+   `/wp-content/plugins/grcpay-woocommerce/`.
+2. Activate **Gridcoin Payment Gateway for WooCommerce** in the Plugins
+   dashboard.
 
 = Updating =
 
-Automatic updates should work like a charm; as always though, ensure you backup your site just in case.
+WordPress's automatic update flow works fine; back up your site first as
+usual.
+
 
 == Configuration ==
 
-1. Go to WooCommerce settings
-2. Select the "Payments" tab
-3. Activate the payment method (if inactive)
-4. Set the name you wish to show your users on Checkout (for example: "Cryptocurrency")
-5. Fill the payment method's description (for example: "Pay with cryptocurrency")
-6. Select which cryptocurrencies you wish to accept (control + click to select many)
-7. Input your addresses to the cryptocurrencies you selected. This is where your funds will be sent to, so make sure the addresses are correct.
-8. Click "Save Changes"
-9. All done!
+1. WooCommerce → Settings → Payments.
+2. Enable **Gridcoin (GRC)** and click *Manage*.
+3. Set:
+   * **Payment Proxy URL** — `https://grcpay.gridcoin.club` or your own
+     grcpay deployment.
+   * *(optional)* **Backup Payment Proxy URL** — used only if the primary
+     is unreachable at wallet-creation time.
+   * **Gridcoin Address** — the wallet payments are forwarded to.
+4. Adjust QR-code size, branding, and order-cancellation timeout to taste.
+5. Save.
+
+The settings screen refuses plain-HTTP grcpay URLs that point at a public
+host, because wallet tokens travel over that connection and would leak in
+plaintext. Loopback, RFC1918, `*.local`, and bare docker-style hostnames
+are allowed for development.
+
 
 == Frequently Asked Questions ==
 
-= Do I need an API key? =
+= Do I need a grcpay API key? =
 
-No. You just need to insert your crypto address of the cryptocurrencies you wish to accept. Whenever a customer pays, the money will be automatically and instantly forwarded to your address.
+No. grcpay is anonymous-by-design. You only need your own Gridcoin
+receiving address.
 
-= How long do payments take before they're confirmed? =
+= How long does a payment take to confirm? =
 
-This depends on the cryptocurrency you're using. Bitcoin usually takes up to 11 minutes, Ethereum usually takes less than a minute.
+The thank-you page flips to "payment confirmed" once grcpay reports the
+wallet as `funded`, which is typically a couple of Gridcoin blocks after
+the customer hits send. There's a "detected, waiting for confirmations"
+banner during the wait.
 
-= Is there a minimum for a payment? =
+= Is there a minimum payment? =
 
-Yes, the minimums change according to the chosen cryptocurrency and can be checked [here](https://cryptapi.io/pricing/).
-If the WooCommerce order total is below the chosen cryptocurrency's minimum, an error is raised to the user.
+Yes — 0.001 GRC. Smaller order totals are rejected at checkout with a
+clear error.
 
-= Where can I find more documentation on your service? =
+= What if the customer doesn't pay? =
 
-You can find more documentation about our service on our [get started](https://cryptapi.io/get_started) page, our [technical documentation](https://cryptapi.io/docs/) page or our [resources](https://cryptapi.io/resources/) page.
-If there's anything else you need that is not covered on those pages, please get in touch with us, we're here to help you!
+If you've configured an *Order cancellation timeout*, the plugin cancels
+the WC order and asks grcpay to cancel the wallet. grcpay's
+expired-refund flow then returns any partial balance to the sender on its
+next cycle.
+
+= What if grcpay is briefly unreachable? =
+
+The plugin tries the backup URL at wallet creation, pins each order to
+whichever URL minted it, and the WP-Cron fallback poller (every 30
+seconds) re-checks any on-hold GRC orders so a missed AJAX poll
+self-heals.
 
 = Where can I get support? =
 
-The easiest and fastest way is via our live chat on our [website](https://cryptapi.io), via our [contact form](https://cryptapi.io/contact/), via [discord](https://discord.gg/pQaJ32SGrR) or via [telegram](https://t.me/cryptapi_support).
+Open an issue at https://github.com/gridcat/gridcoin.club or ask in the
+Gridcoin community channels.
 
-== Screenshots ==
-
-1. The settings panel used to configure the gateway
-2. Set your crypto addresses (part 1)
-3. Set your crypto addresses (part 2)
-4. Example of payment using Litecoins
-5. The QR code can be set to provide only the address or the address with the amount: the user can choose with one click
-6. Once the payment is received, the system will wait for network confirmations
-7. The payment is confirmed!
 
 == Changelog ==
 
-= 1.0 =
+= 1.0.0 =
 * Initial release.
-
-= 2.0 =
-* New coins
-* Updated codebase
-* New API URL
-
-= 3.0 =
-* UI Improvements
-* Minor Bug Fixes
-
-= 3.0.2 =
-* New setting to show QR Code by default
-* UI Improvements
-* Minor Bug Fixes
-
-= 3.1 =
-* Add support for WooCommerce Subscriptions plugin
-* Add new feature to refresh values based on store owner preferences
-* Add new feature to cancel orders if they take more than selected time to pay
-
-= 3.2 =
-* UI Improvements
-* Minor Bug Fixes
-
-= 3.2.1 =
-* Add translations for multiple languages
-
-= 4.0 =
-* New settings and color schemes to fit dark mode
-* New settings to add CryptAPI's services fees to the checkout
-* New settings to add blockchain fees to the checkout
-* Upgrade the settings
-* UI Improvements
-* Minor fixes
-
-= 4.0.1 =
-* Minor fixes
-
-= 4.0.2 =
-* Minor fixes
-
-= 4.0.3 =
-* Minor fixes
-
-= 4.0.4 =
-* Minor fixes
-
-= 4.0.5 =
-* UI Improvements
-
-= 4.0.6 =
-* Disable QR Code with value in certain currencies due to some wallets not supporting it
-
-= 4.0.7 =
-* Minor fixes
-
-= 4.1 =
-* Added a history of transactions to the order payment page
-* Better handling of partial payments
-* Minor fixes
-* UI Improvements
-
-= 4.2 =
-* Improved algorithm
-* Minor fixes
-* UI Improvements
-
-= 4.2.1 =
-* Minor fixes
-
-= 4.2.2 =
-* Minor fixes
-
-= 4.2.3 =
-* Minor fixes
-
-= 4.2.4 =
-* Minor fixes
-
-= 4.3 =
-* Improve calculations
-* Minor fixes
-
-= 4.3.1 =
-* Minor fixes
-
-= 4.3.2 =
-* Minor fixes
-
-= 4.3.3 =
-* Minor fixes
-
-= 4.3.4 =
-* Feature to enable marking virtual products order as completed instead of processing
-* Minor fixes
-
-= 4.4 =
-* Support CryptAPI Pro
-* Minor fixes
-
-= 4.4.1 =
-* Minor fixes
-
-= 4.4.2 =
-* Minor fixes
-
-= 4.4.3 =
-* Minor fixes
-
-= 4.5.0 =
-* Minor fixes
-* Improved algorithm
-* Added cryptocurrencies logos to the checkout
-
-= 4.5.1 =
-* Minor fixes
-
-= 4.5.2 =
-* Minor fixes
-
-= 4.6.0 =
-* New BlockBee API Url
-* Minor fixes
-
-= 4.6.1 =
-* Minor fixes
-
-= 4.6.2 =
-* New mechanisms to detect callbacks even if they fail
-* Minor fixes
-* Added new languages
-
-= 4.6.3 =
-* Minor fixes
-
-= 4.6.4 =
-* Minor fixes
-
-== Upgrade Notice ==
-
-= 4.3 =
-Please be sure to enable the PHP extension BCMath before upgrading to this version.
+* Gridcoin (GRC) payment method via grcpay.
+* Per-order wallet, QR-code thank-you page, live amount + status polling
+  with a per-order WP nonce.
+* WP-Cron fallback poller for on-hold orders.
+* Primary + backup grcpay URL support with per-order pinning.
+* Plain-HTTP refusal for non-private grcpay URLs.
+* Merchant-initiated cancellation propagates to grcpay so the
+  expired-refund flow returns any partial balance to the sender.

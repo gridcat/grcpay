@@ -10,6 +10,8 @@ WC requires at least: 5.8
 Requires PHP: 7.4
 Author: gridcat
 License: MIT
+Text Domain: grcpay-woocommerce
+Domain Path: /languages
 */
 
 require_once 'define.php';
@@ -17,13 +19,13 @@ require_once 'define.php';
 function grcpay_missing_wc_notice()
 {
     echo '<div class="error"><p><strong>' .
-        esc_html__('Gridcoin Payment Gateway requires WooCommerce to be installed and active.', 'cryptapi') .
+        esc_html__('Gridcoin Payment Gateway requires WooCommerce to be installed and active.', 'grcpay-woocommerce') .
         '</strong></p></div>';
 }
 
 function grcpay_include_gateway($methods)
 {
-    $methods[] = 'WC_CryptAPI_Gateway';
+    $methods[] = 'WC_Grcpay_Gateway';
     return $methods;
 }
 
@@ -34,15 +36,15 @@ function grcpay_loader()
         return;
     }
 
-    require_once CRYPTAPI_PLUGIN_PATH . 'utils/helper.php';
-    require_once CRYPTAPI_PLUGIN_PATH . 'controllers/CryptAPI.php';
+    require_once GRCPAY_PLUGIN_PATH . 'utils/helper.php';
+    require_once GRCPAY_PLUGIN_PATH . 'controllers/Gateway.php';
 }
 
 /**
  * Instantiate the gateway lazily on demand so its AJAX handler is accessible
  * from admin-ajax.php.
  *
- * The gateway class normally registers `wp_ajax_*cryptapi_order_status` in
+ * The gateway class normally registers `wp_ajax_*grcpay_order_status` in
  * its constructor — but WC only instantiates payment gateways when something
  * actively asks for them (front-end checkout, admin settings screen, WC's
  * own init call), and plain admin-ajax.php does not. Without this shim the
@@ -51,11 +53,11 @@ function grcpay_loader()
  */
 function grcpay_dispatch_order_status_ajax()
 {
-    if (!class_exists('WC_CryptAPI_Gateway')) {
-        require_once CRYPTAPI_PLUGIN_PATH . 'utils/helper.php';
-        require_once CRYPTAPI_PLUGIN_PATH . 'controllers/CryptAPI.php';
+    if (!class_exists('WC_Grcpay_Gateway')) {
+        require_once GRCPAY_PLUGIN_PATH . 'utils/helper.php';
+        require_once GRCPAY_PLUGIN_PATH . 'controllers/Gateway.php';
     }
-    $gateway = new WC_CryptAPI_Gateway();
+    $gateway = new WC_Grcpay_Gateway();
     $gateway->order_status();
 }
 
@@ -64,7 +66,7 @@ function grcpay_cron_schedules($schedules)
 {
     $schedules['grcpay_interval'] = [
         'interval' => 30,
-        'display' => __('Every 30 seconds (GRC Payment Check)', 'cryptapi'),
+        'display' => __('Every 30 seconds (GRC Payment Check)', 'grcpay-woocommerce'),
     ];
     return $schedules;
 }
@@ -76,8 +78,8 @@ add_filter('woocommerce_payment_gateways', 'grcpay_include_gateway');
 // Register the status-poll AJAX handler at the top level so admin-ajax.php
 // sees it regardless of whether WC has instantiated the gateway yet. See
 // grcpay_dispatch_order_status_ajax() above for the full rationale.
-add_action('wp_ajax_cryptapi_order_status', 'grcpay_dispatch_order_status_ajax');
-add_action('wp_ajax_nopriv_cryptapi_order_status', 'grcpay_dispatch_order_status_ajax');
+add_action('wp_ajax_grcpay_order_status', 'grcpay_dispatch_order_status_ajax');
+add_action('wp_ajax_nopriv_grcpay_order_status', 'grcpay_dispatch_order_status_ajax');
 
 // Cleanup cron on deactivation
 register_deactivation_hook(__FILE__, function () {

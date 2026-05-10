@@ -9,7 +9,7 @@
  *
  *   1. Load Composer's autoloader (Brain Monkey + PHPUnit itself).
  *   2. Declare a stub `WC_Payment_Gateway` parent class with a no-op
- *      constructor so `WC_CryptAPI_Gateway` can be instantiated
+ *      constructor so `WC_Grcpay_Gateway` can be instantiated
  *      without needing a running WooCommerce.
  *   3. Polyfill a tiny handful of WordPress globals (`__()`,
  *      `esc_html()`, etc.) that the class file calls at parse time
@@ -17,8 +17,8 @@
  *   4. Require the plugin files so their class definitions are
  *      available, WITHOUT running the top-level `add_action()` /
  *      `add_filter()` registrations that the main plugin entry
- *      (CryptAPI.php) fires at load time — we only load the helper
- *      and the controller, not the bootstrap file.
+ *      (grcpay-woocommerce.php) fires at load time — we only load
+ *      the helper and the controller, not the bootstrap file.
  *
  * Tests that need richer WP behaviour (hooks firing, user caps,
  * option storage) should use Brain Monkey's setUp/tearDown in the
@@ -187,12 +187,13 @@ if (!function_exists('wp_next_scheduled')) {
 
 // ---------------------------------------------------------------------
 // Load the plugin class files. NOTE: we deliberately do NOT require
-// CryptAPI.php (the main plugin entry) because it registers real WP
-// hooks and schedules cron events. We only need the class definitions.
+// grcpay-woocommerce.php (the main plugin entry) because it registers
+// real WP hooks and schedules cron events. We only need the class
+// definitions.
 // ---------------------------------------------------------------------
-define('CRYPTAPI_PLUGIN_VERSION', '0.0.0-test');
-define('CRYPTAPI_PLUGIN_PATH', dirname(__DIR__) . '/plugin/');
-define('CRYPTAPI_PLUGIN_URL', 'https://example.test/wp-content/plugins/grcpay-woocommerce/');
+define('GRCPAY_PLUGIN_VERSION', '0.0.0-test');
+define('GRCPAY_PLUGIN_PATH', dirname(__DIR__) . '/plugin/');
+define('GRCPAY_PLUGIN_URL', 'https://example.test/wp-content/plugins/grcpay-woocommerce/');
 
-require_once CRYPTAPI_PLUGIN_PATH . 'utils/helper.php';
-require_once CRYPTAPI_PLUGIN_PATH . 'controllers/CryptAPI.php';
+require_once GRCPAY_PLUGIN_PATH . 'utils/helper.php';
+require_once GRCPAY_PLUGIN_PATH . 'controllers/Gateway.php';

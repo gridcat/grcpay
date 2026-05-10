@@ -1,0 +1,17 @@
+# Copyright (C) 2026 gridcat
+# This file is distributed under the MIT license.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gridcoin Payment Gateway for WooCommerce 1.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/gridcat/gridcoin.club/issues\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Domain: grcpay-woocommerce\n"
+
+# Translators: Regenerate this file from the current source with:
+#   wp i18n make-pot plugin/ plugin/languages/grcpay-woocommerce.pot
+# from the package root after changing user-visible strings.

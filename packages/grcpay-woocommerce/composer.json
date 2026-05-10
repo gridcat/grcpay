@@ -12,7 +12,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "CryptAPI\\Tests\\": "tests/"
+            "Grcpay\\Tests\\": "tests/"
         }
     },
     "scripts": {

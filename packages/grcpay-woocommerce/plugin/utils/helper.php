@@ -1,6 +1,6 @@
 <?php
 
-namespace CryptAPI;
+namespace Grcpay;
 
 use Exception;
 
@@ -63,8 +63,52 @@ class Helper
     }
 
     /**
+     * Fresh cache window — within this TTL we serve straight from the
+     * transient and skip the HTTP round trip entirely. Matches the
+     * grcpay-side cache so stacking the two layers doesn't create
+     * weirder staleness than either layer alone.
+     */
+    private static $RATE_FRESH_TTL_SECONDS = 300;
+
+    /**
+     * Stale fallback window — used only when every live source fails.
+     * 24h is long enough to sail through typical CoinGecko outages and
+     * proxy restarts; past a day the price has drifted enough that
+     * throwing is the safer option.
+     */
+    private static $RATE_STALE_TTL_SECONDS = 86400;
+
+    private static function rateFreshKey($currency)
+    {
+        return 'grcpay_rate_' . $currency;
+    }
+
+    private static function rateStaleKey($currency)
+    {
+        return 'grcpay_rate_stale_' . $currency;
+    }
+
+    private static function readFreshRate($currency)
+    {
+        $cached = get_transient(self::rateFreshKey($currency));
+        return $cached === false ? null : (float)$cached;
+    }
+
+    private static function readStaleRate($currency)
+    {
+        $cached = get_transient(self::rateStaleKey($currency));
+        return $cached === false ? null : (float)$cached;
+    }
+
+    private static function cacheRate($currency, $rate)
+    {
+        set_transient(self::rateFreshKey($currency), $rate, self::$RATE_FRESH_TTL_SECONDS);
+        set_transient(self::rateStaleKey($currency), $rate, self::$RATE_STALE_TTL_SECONDS);
+    }
+
+    /**
      * Get GRC exchange rate via the payment proxy's /rates endpoint.
-     * The proxy caches CoinGecko responses server-side (5 min TTL).
+     * Fetch-only; caller owns caching. Throws on any failure.
      */
     private function getRateViaProxy($currency)
     {
@@ -82,7 +126,7 @@ class Helper
         $body = json_decode(wp_remote_retrieve_body($response));
 
         if ($code !== 200 || empty($body->data->attributes->rate)) {
-            $error = isset($body->errors[0]->title) ? $body->errors[0]->title : 'Unknown error';
+            $error = isset($body->errors[0]->title) ? $body->errors[0]->title : "HTTP {$code}";
             throw new Exception('Rate proxy error: ' . $error);
         }
 
@@ -91,17 +135,10 @@ class Helper
 
     /**
      * Get GRC exchange rate directly from CoinGecko.
-     * Cached as a WP transient for 5 minutes.
+     * Fetch-only; caller owns caching. Throws on any failure.
      */
     private static function getRateViaCoinGecko($currency)
     {
-        $cache_key = 'grcpay_rate_' . $currency;
-
-        $cached = get_transient($cache_key);
-        if ($cached !== false) {
-            return (float)$cached;
-        }
-
         $currencyId = 'gridcoin-research';
         $url = self::$coinGeckoApiBase . "simple/price?ids={$currencyId}&vs_currencies={$currency}";
         $response = wp_remote_get($url, [
@@ -118,14 +155,20 @@ class Helper
             throw new Exception("Unable to fetch GRC rate for {$currency}");
         }
 
-        $rate = (float)$rates[$currencyId][$currency];
-        set_transient($cache_key, $rate, 5 * MINUTE_IN_SECONDS);
-
-        return $rate;
+        return (float)$rates[$currencyId][$currency];
     }
 
     /**
      * Convert a fiat price to GRC.
+     *
+     * Resolution order:
+     *   1. Fresh transient (same 5min window regardless of mode)
+     *   2. Primary source for the selected mode (proxy or CoinGecko)
+     *   3. In proxy mode, direct CoinGecko as a second-chance fallback —
+     *      keeps checkout alive if grcpay itself is unreachable
+     *   4. Stale transient (up to 24h old) — a slightly-off conversion
+     *      is better than a broken Place Order button
+     *   5. Throw only when every source has failed with no cached value
      *
      * @param float $price Fiat price
      * @param string $currency Fiat currency code (e.g. 'eur', 'usd')
@@ -134,10 +177,38 @@ class Helper
     public function convertPriceToGrc($price, $currency, $useProxy = true)
     {
         $currency = strtolower($currency);
-        $rate = $useProxy
-            ? $this->getRateViaProxy($currency)
-            : self::getRateViaCoinGecko($currency);
-        return $price / $rate;
+
+        $fresh = self::readFreshRate($currency);
+        if ($fresh !== null && $fresh > 0) {
+            return $price / $fresh;
+        }
+
+        $errors = [];
+
+        if ($useProxy) {
+            try {
+                $rate = $this->getRateViaProxy($currency);
+                self::cacheRate($currency, $rate);
+                return $price / $rate;
+            } catch (Exception $e) {
+                $errors[] = 'proxy: ' . $e->getMessage();
+            }
+        }
+
+        try {
+            $rate = self::getRateViaCoinGecko($currency);
+            self::cacheRate($currency, $rate);
+            return $price / $rate;
+        } catch (Exception $e) {
+            $errors[] = 'coingecko: ' . $e->getMessage();
+        }
+
+        $stale = self::readStaleRate($currency);
+        if ($stale !== null && $stale > 0) {
+            return $price / $stale;
+        }
+
+        throw new Exception('Unable to fetch GRC rate (' . implode('; ', $errors) . ')');
     }
 
     /**
@@ -289,6 +360,18 @@ class Helper
         }
 
         return null;
+    }
+
+    /**
+     * Strip everything that isn't a hex character. Applied to txids
+     * coming from the grcpay JSON API before they cross any trust
+     * boundary (rendered into payment.js, written to order notes,
+     * embedded in emails) so a compromised proxy can't smuggle markup
+     * past the consumers that treat the value as text.
+     */
+    public static function sanitizeTxid($value)
+    {
+        return is_string($value) ? preg_replace('/[^0-9a-fA-F]/', '', $value) : '';
     }
 
     /**

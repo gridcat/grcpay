@@ -8,7 +8,7 @@ do_action( 'woocommerce_email_header', $email_heading, $email );
 printf(
 	wp_kses(
 	/* translators: %1$s Site title, %2$s Order pay link */
-		__( 'Please renew your subscription on %1$s. You can pay the renewal when you’re ready: %2$s', 'cryptapi' ),
+		__( 'Please renew your subscription on %1$s. You can pay the renewal when you’re ready: %2$s', 'grcpay-woocommerce' ),
 		array(
 			'a' => array(
 				'href' => array(),

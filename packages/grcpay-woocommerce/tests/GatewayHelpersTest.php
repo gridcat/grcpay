@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace CryptAPI\Tests;
+namespace Grcpay\Tests;
 
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
-use WC_CryptAPI_Gateway;
+use WC_Grcpay_Gateway;
 
 /**
  * Tests for the gateway's smaller private helpers that didn't
@@ -20,7 +20,7 @@ use WC_CryptAPI_Gateway;
  * The instance methods are exercised by building a gateway via
  * reflection WITHOUT running the real constructor (which would need
  * WooCommerce loaded). The stub `WC_Payment_Gateway` in bootstrap.php
- * provides just enough surface for `new WC_CryptAPI_Gateway()` to
+ * provides just enough surface for `new WC_Grcpay_Gateway()` to
  * resolve; we then reach in with reflection to set only the
  * properties each test actually depends on.
  */
@@ -32,11 +32,11 @@ final class GatewayHelpersTest extends TestCase
      * / hook registration machinery. Each test sets the properties
      * it needs directly.
      */
-    private function gatewayWithProperties(array $properties = []): WC_CryptAPI_Gateway
+    private function gatewayWithProperties(array $properties = []): WC_Grcpay_Gateway
     {
-        $instance = (new \ReflectionClass(WC_CryptAPI_Gateway::class))->newInstanceWithoutConstructor();
+        $instance = (new \ReflectionClass(WC_Grcpay_Gateway::class))->newInstanceWithoutConstructor();
         foreach ($properties as $name => $value) {
-            $prop = new ReflectionProperty(WC_CryptAPI_Gateway::class, $name);
+            $prop = new ReflectionProperty(WC_Grcpay_Gateway::class, $name);
             $prop->setAccessible(true);
             $prop->setValue($instance, $value);
         }
@@ -49,7 +49,7 @@ final class GatewayHelpersTest extends TestCase
 
     public function testNonceActionIsScopedPerOrder(): void
     {
-        $method = new ReflectionMethod(WC_CryptAPI_Gateway::class, 'nonce_action_for_order');
+        $method = new ReflectionMethod(WC_Grcpay_Gateway::class, 'nonce_action_for_order');
         $method->setAccessible(true);
 
         self::assertSame('grcpay_order_status_1', $method->invoke(null, 1));
@@ -61,7 +61,7 @@ final class GatewayHelpersTest extends TestCase
         // A stolen nonce from order 42 must not be replayable against
         // order '42abc' if a future path ever accepts string IDs.
         // intval() strips trailing non-numeric suffixes.
-        $method = new ReflectionMethod(WC_CryptAPI_Gateway::class, 'nonce_action_for_order');
+        $method = new ReflectionMethod(WC_Grcpay_Gateway::class, 'nonce_action_for_order');
         $method->setAccessible(true);
 
         self::assertSame('grcpay_order_status_42', $method->invoke(null, '42abc'));
@@ -73,7 +73,7 @@ final class GatewayHelpersTest extends TestCase
         // Regression guard: if someone accidentally drops the order_id
         // from the nonce action name, every order would share one
         // nonce scope and a captured nonce could walk the store.
-        $method = new ReflectionMethod(WC_CryptAPI_Gateway::class, 'nonce_action_for_order');
+        $method = new ReflectionMethod(WC_Grcpay_Gateway::class, 'nonce_action_for_order');
         $method->setAccessible(true);
 
         $actions = [];
@@ -176,9 +176,9 @@ final class GatewayHelpersTest extends TestCase
         );
     }
 
-    private function invokeCandidateUrls(WC_CryptAPI_Gateway $gateway): array
+    private function invokeCandidateUrls(WC_Grcpay_Gateway $gateway): array
     {
-        $method = new ReflectionMethod(WC_CryptAPI_Gateway::class, 'get_candidate_urls');
+        $method = new ReflectionMethod(WC_Grcpay_Gateway::class, 'get_candidate_urls');
         $method->setAccessible(true);
         return $method->invoke($gateway);
     }

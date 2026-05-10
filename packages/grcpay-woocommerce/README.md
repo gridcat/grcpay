@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="plugin/static/files/logo_grc.png" width="420" alt="grcpay">
+</p>
+
 # grcpay-woocommerce
 
 WooCommerce payment gateway plugin for Gridcoin (GRC), powered by [grcpay](https://grcpay.gridcoin.club).
@@ -10,19 +14,19 @@ the package root just holds development and release tooling.
 
 ```
 grcpay-woocommerce/
-├── plugin/                 # what ships to WP (matches the .zip contents)
-│   ├── CryptAPI.php        #   main plugin entry (header + loader)
-│   ├── define.php          #   constants
-│   ├── controllers/        #   WC_CryptAPI_Gateway (payment handler)
-│   ├── utils/helper.php    #   grcpay API wrapper
-│   ├── static/             #   JS, CSS, icons
-│   ├── emails/             #   email templates
-│   ├── languages/          #   i18n (.po / .mo / .pot)
-│   ├── README.md           #   end-user readme
-│   └── readme.txt          #   WP.org-style readme
-├── scripts/build-zip.sh    # produce dist/grcpay-woocommerce.zip
-├── package.json            # nx-aware package metadata + scripts
-└── README.md               # (this file)
+├── plugin/                          # what ships to WP (matches the .zip contents)
+│   ├── grcpay-woocommerce.php       #   main plugin entry (header + loader)
+│   ├── define.php                   #   constants
+│   ├── controllers/Gateway.php      #   WC_Grcpay_Gateway (payment handler)
+│   ├── utils/helper.php             #   grcpay API wrapper
+│   ├── static/                      #   JS, CSS, icons
+│   ├── emails/                      #   email templates
+│   ├── languages/                   #   i18n (.pot stub; regenerate via wp i18n make-pot)
+│   ├── README.md                    #   end-user readme
+│   └── readme.txt                   #   WP.org-style readme
+├── scripts/build-zip.sh             # produce dist/grcpay-woocommerce.zip
+├── package.json                     # nx-aware package metadata + scripts
+└── README.md                        # (this file)
 ```
 
 ## Develop
@@ -97,14 +101,14 @@ job that runs on the `cimg/php:8.3` image, decoupled from the
 Nx-affected detection the Node packages use. It does a fresh
 checkout, restores the Composer cache by `composer.lock` checksum
 (same caching pattern the Node jobs use for `package-lock.json`),
-installs, and runs `composer test`. See
-`grcpay.gridcoin.club/.circleci/config.yml` for the full job.
+installs, and runs `composer test`. See `.circleci/config.yml` at
+the monorepo root for the full job.
 
 ### How the tests stay lightweight
 
 `tests/bootstrap.php` declares a minimal `WC_Payment_Gateway` stub
 and polyfills `__()`, `esc_html()`, `wp_parse_url()`, and a few
-other WP globals, so `WC_CryptAPI_Gateway` can be instantiated and
+other WP globals, so `WC_Grcpay_Gateway` can be instantiated and
 reflected on without loading WordPress or WooCommerce. Tests that
 need richer WP behaviour (hooks firing, option storage, nonce
 verification, user capabilities) should layer Brain Monkey's
@@ -118,9 +122,8 @@ you can exercise end-to-end in a browser.
 
 ## Status
 
-The plugin was forked from CryptAPI and adapted for grcpay in 2022. The grcpay
-protocol has moved on since then, so many of the endpoints and response shapes
-this code expects may no longer match — expect active churn as the plugin is
-brought back in line with the current API. See
-`grcpay.gridcoin.club/packages/grcpay-frontend/src/routes/integrations/woocommerce/`
-for the docs site copy that tracks the install/configure flow.
+The plugin is at v1.0.0 and tracks the current grcpay API. The user-facing
+docs site copy lives at
+`packages/grcpay-frontend/src/routes/integrations/woocommerce/`
+and should stay in sync with the install/configure flow described in
+`plugin/README.md` and `plugin/readme.txt`.
