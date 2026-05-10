@@ -21,13 +21,13 @@ export function Prerequisites() {
           <ListItem disableGutters>
             <ListItemText
               primary="A server with Docker installed"
-              secondary="Any small VPS works. GRCpay itself is tiny — &lt;100 MB RAM, &lt;100 MB disk for the SQLite file. A Gridcoin wallet container, if you run one alongside, is the heavier piece (a few GB of chain data once synced)."
+              secondary="Any small VPS works. GRCpay itself is tiny: &lt;100 MB RAM, &lt;100 MB disk for the SQLite file. A Gridcoin wallet container, if you run one alongside, is the heavier piece (a few GB of chain data once synced)."
             />
           </ListItem>
           <ListItem disableGutters>
             <ListItemText
               primary="A Gridcoin wallet you control"
-              secondary="Either an existing gridcoinresearchd you already operate, or a fresh wallet you'll start in a container. GRCpay never holds funds itself — every address it mints belongs to your wallet."
+              secondary="Either an existing gridcoinresearchd you already operate, or a fresh wallet you'll start in a container. GRCpay never holds funds itself. Every address it mints belongs to your wallet."
             />
           </ListItem>
           <ListItem disableGutters>

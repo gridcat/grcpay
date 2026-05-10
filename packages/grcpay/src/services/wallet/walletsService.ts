@@ -1,14 +1,11 @@
-import { Wallet, WalletMode, WalletStatus } from '../../models/Wallet';
+import { WalletMode, WalletStatus } from '../../models/Wallet';
+import { db, now } from '../../lib/db';
 import { config } from '../../config';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 
 export class WalletsServiceClass {
-  constructor(
-    private wallet = new Wallet(),
-  ) {}
-
   /**
    * Reconcile wallet statuses against the latest (confirmed, pending,
    * required) triple. Runs every job-loop tick right after
@@ -39,29 +36,27 @@ export class WalletsServiceClass {
    */
   public async findFundedWallets(): Promise<void> {
     log.info('Reconcile open wallet statuses against latest balances');
-    const candidates = await this.wallet.model.findMany({
-      select: {
-        id: true,
-        status: true,
-        amount_required: true,
-        amount_recieved: true,
-        amount_pending: true,
-      },
-      where: {
-        status: {
-          in: [WalletStatus.new, WalletStatus.confirming],
-        },
-        mode: WalletMode.checkout,
-      },
-    });
+    const candidates = await db
+      .selectFrom('wallets')
+      .select([
+        'id',
+        'status',
+        'amount_required',
+        'amount_recieved',
+        'amount_pending',
+      ])
+      .where('status', 'in', [WalletStatus.new, WalletStatus.confirming])
+      .where('mode', '=', WalletMode.checkout)
+      .execute();
 
-    const targetFor = (w: typeof candidates[number]): WalletStatus => {
+    type Candidate = typeof candidates[number];
+    const targetFor = (w: Candidate): WalletStatus => {
       if (w.amount_recieved >= w.amount_required) return WalletStatus.funded;
       if (w.amount_recieved + w.amount_pending >= w.amount_required) return WalletStatus.confirming;
       return WalletStatus.new;
     };
 
-    const buckets = new Map<WalletStatus, { id: number; oldStatus: string }[]>();
+    const buckets = new Map<WalletStatus, { id: bigint; oldStatus: string }[]>();
     for (const w of candidates) {
       const target = targetFor(w);
       if (target === w.status) continue;
@@ -71,13 +66,14 @@ export class WalletsServiceClass {
 
     await Promise.all(Array.from(buckets.entries()).map(async ([newStatus, rows]) => {
       log.info(`${rows.length} wallet(s) reconciled to ${newStatus}`);
-      await this.wallet.model.updateMany({
-        data: { status: newStatus },
-        where: { id: { in: rows.map((r) => r.id) } },
-      });
+      await db
+        .updateTable('wallets')
+        .set({ status: newStatus, updated_at: now() })
+        .where('id', 'in', rows.map((r) => r.id))
+        .execute();
       for (const { id, oldStatus } of rows) {
         getEventEmitter<DbLogMessage>().emit('log', {
-          walletId: id,
+          walletId: Number(id),
           action: 'status',
           oldStatus,
           newStatus,
@@ -87,70 +83,55 @@ export class WalletsServiceClass {
   }
 
   /**
-   * Find all wallets which seems to be expired and update the status to expired
-   *
-   * @returns {Promise<void>}
-   * @memberof WalletsServiceClass
+   * Find all wallets which seems to be expired and update the status
+   * to expired.
    */
   public async expireWallets(): Promise<void> {
-    // Check opened wallets.
-    //
     // Per-wallet lifespan: each wallet may override config.LIFE_SPAN
     // via its own lifespan_seconds column (null means "use default").
-    // We can't push that into a SQL date cutoff cleanly without a
-    // CASE expression, so we fetch all open wallets and filter in
-    // application code. The open set is bounded (new + error), so the
-    // cost is small and the code is much easier to reason about.
+    // Filtering happens in JS because mixing a CASE expression with a
+    // datetime cutoff in SQLite is harder to read than just walking
+    // the bounded open set. Open status volume is small.
     log.info('Check for expired wallets');
-    const openedWallets = await this.wallet.model.findMany({
-      select: {
-        id: true,
-        status: true,
-        created_at: true,
-        lifespan_seconds: true,
-      },
-      where: {
-        status: {
-          // `confirming` is included so a wallet that's been stuck
-          // waiting for confirmations past its lifespan still ages
-          // out and hands off to the refund flow, instead of hanging
-          // around forever if a customer's tx stalled in the mempool.
-          in: [
-            WalletStatus.new,
-            WalletStatus.confirming,
-            WalletStatus.error,
-          ],
-        },
-      },
+    const openedWallets = await db
+      .selectFrom('wallets')
+      .select(['id', 'status', 'created_at', 'lifespan_seconds'])
+      // `confirming` is included so a wallet stuck waiting for
+      // confirmations past its lifespan still ages out and hands off
+      // to the refund flow, instead of hanging around forever if a
+      // customer's tx stalled in the mempool.
+      .where('status', 'in', [
+        WalletStatus.new,
+        WalletStatus.confirming,
+        WalletStatus.error,
+      ])
+      .execute();
+
+    const nowMs = Date.now();
+    const expired = openedWallets.filter((w) => {
+      const lifespanSec = w.lifespan_seconds === null
+        ? config.LIFE_SPAN
+        : Number(w.lifespan_seconds);
+      const expiresAt = new Date(w.created_at).getTime() + lifespanSec * 1000;
+      return expiresAt <= nowMs;
     });
-    const now = Date.now();
-    const expiredWallets = openedWallets.filter((w) => {
-      const lifespanSec = w.lifespan_seconds ?? config.LIFE_SPAN;
-      const expiresAt = w.created_at.getTime() + lifespanSec * 1000;
-      return expiresAt <= now;
+    if (!expired.length) return;
+    log.info(`${expired.length} wallet(s) to be expired`);
+
+    await db
+      .updateTable('wallets')
+      .set({ status: WalletStatus.expired, updated_at: now() })
+      .where('id', 'in', expired.map((w) => w.id))
+      .execute();
+
+    expired.forEach((wallet) => {
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id),
+        action: 'status',
+        oldStatus: wallet.status,
+        newStatus: WalletStatus.expired,
+      });
     });
-    const ids = expiredWallets.map((w) => w.id);
-    if (ids.length) {
-      log.info(`${ids.length} wallet(s) to be expired`);
-      await this.wallet.model.updateMany({
-        data: {
-          status: WalletStatus.expired,
-        },
-        where: {
-          id: {
-            in: ids,
-          },
-        },
-      });
-      expiredWallets.forEach((wallet) => {
-        getEventEmitter<DbLogMessage>().emit('log', {
-          walletId: wallet.id,
-          action: 'status',
-          oldStatus: wallet.status,
-          newStatus: WalletStatus.expired,
-        });
-      });
-    }
   }
 }
 

@@ -1,13 +1,12 @@
 FROM node:22.16.0-alpine3.22
 
-LABEL maintainer="Gridcoin Pay Project"
+LABEL maintainer="GrcPay Project"
 LABEL description="Development environment for grcpay backend service"
 
-# Prisma's query engine binary dynamically links against libssl/libcrypto and
-# runs its own OpenSSL-version detection against the system filesystem.
-# node:*-alpine ships Node with a bundled OpenSSL but no system libssl,
-# so detection fails and Prisma falls back to the wrong engine binary.
-RUN apk add --no-cache openssl
+# better-sqlite3 ships prebuilt binaries for common platforms but
+# falls back to compiling from source on Alpine, which needs the
+# usual toolchain. Cheap on a one-time install.
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /usr/src/app
 

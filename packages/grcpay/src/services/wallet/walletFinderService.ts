@@ -1,23 +1,20 @@
 import { Wallet } from '../../models/Wallet';
+import { db } from '../../lib/db';
 
 export class WalletsFinderServiceClass {
-  constructor(
-    private wallet = new Wallet(),
-  ) {}
-
   public async findWalletByAddress(address: string): Promise<Wallet> {
     if (!address) {
       throw new Error('Address is required');
     }
-    const result = await this.wallet.model.findFirst({
-      where: {
-        address,
-      },
-    });
-    if (!result) {
+    const row = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('address', '=', address)
+      .executeTakeFirst();
+    if (!row) {
       throw new Error(`Wallet not found for address: ${address}`);
     }
-    return Wallet.fromModel(result);
+    return Wallet.fromRow(row);
   }
 }
 

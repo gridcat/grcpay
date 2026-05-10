@@ -1,6 +1,5 @@
-import { wallets } from '@prisma/client';
-import { getPrisma } from '../lib/prisma';
 import { GenericInterface } from './Generic';
+import type { WalletRow } from '../lib/database';
 
 export enum WalletStatus {
   new = 'new',
@@ -66,7 +65,7 @@ export class Wallet implements GenericInterface {
 
   // Transient: populated only on the Wallet instance returned by the
   // creator service so it can be serialized on the POST /wallets
-  // response. Loading a wallet from DB via fromModel leaves this
+  // response. Loading a wallet from DB via fromRow leaves this
   // undefined, which is why the presenter conditionally omits it on
   // subsequent GETs — the raw token is a one-time reveal.
   public token?: string;
@@ -95,26 +94,31 @@ export class Wallet implements GenericInterface {
     'token',
   ];
 
-  public static fromModel(wallet: wallets): Wallet {
-    const walletObj = new Wallet();
-    walletObj.address = wallet.address;
-    walletObj.amountRecieved = wallet.amount_recieved;
-    walletObj.amountPending = wallet.amount_pending;
-    walletObj.amountRequired = wallet.amount_required;
-    walletObj.createdAt = wallet.created_at;
-    walletObj.id = wallet.id;
-    walletObj.recipient = wallet.recipient;
-    walletObj.status = wallet.status as WalletStatus;
-    walletObj.txOut = wallet.tx_out;
-    walletObj.refundTx = wallet.refund_tx;
-    walletObj.refundAmount = wallet.refund_amount;
-    walletObj.mode = wallet.mode as WalletMode;
-    walletObj.lifespanSeconds = wallet.lifespan_seconds;
-    walletObj.tokenHash = wallet.token_hash;
-    walletObj.refundAttempts = wallet.refund_attempts;
-    walletObj.updatedAt = wallet.updated_at;
-    return walletObj;
+  // Maps a raw DB row (snake_case, bigint id) into the camelCase
+  // value object the rest of the app uses. better-sqlite3 returns
+  // every INTEGER column as bigint; we narrow id / refundAttempts /
+  // lifespanSeconds to number here because they comfortably fit and
+  // the consumers expect arithmetic with regular numbers.
+  public static fromRow(row: WalletRow): Wallet {
+    const wallet = new Wallet();
+    wallet.id = Number(row.id);
+    wallet.address = row.address;
+    wallet.recipient = row.recipient;
+    wallet.amountRequired = row.amount_required;
+    wallet.amountRecieved = row.amount_recieved;
+    wallet.amountPending = row.amount_pending;
+    wallet.status = row.status as WalletStatus;
+    wallet.txOut = row.tx_out;
+    wallet.refundTx = row.refund_tx;
+    wallet.refundAmount = row.refund_amount;
+    wallet.mode = row.mode as WalletMode;
+    wallet.lifespanSeconds = row.lifespan_seconds === null
+      ? null
+      : Number(row.lifespan_seconds);
+    wallet.tokenHash = row.token_hash;
+    wallet.refundAttempts = Number(row.refund_attempts);
+    wallet.createdAt = new Date(row.created_at);
+    wallet.updatedAt = new Date(row.updated_at);
+    return wallet;
   }
-
-  constructor(public model = getPrisma().wallets) {}
 }

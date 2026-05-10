@@ -200,8 +200,8 @@ export function WalletStatusPanel({ initialWallet, onReset }: Props) {
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Your full payment has arrived at the network level. GRCpay is
               waiting for a few more blocks before marking the wallet as
-              funded. This usually takes a couple of minutes — you can safely
-              close this page, the wallet status will update on its own.
+              funded. This usually takes a couple of minutes. You can safely
+              close this page; the wallet status will update on its own.
             </Typography>
           </Box>
         )}
@@ -223,7 +223,7 @@ export function WalletStatusPanel({ initialWallet, onReset }: Props) {
               {`${formatGrc(wallet.amountPending)} GRC`}
             </Typography>
             <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}>
-              Detected on chain, not yet confirmed. No action needed — GRCpay will settle it once it reaches the configured block depth.
+              Detected on chain, not yet confirmed. GRCpay will settle it once it reaches the configured block depth.
             </Typography>
           </Box>
         )}
@@ -277,7 +277,7 @@ export function WalletStatusPanel({ initialWallet, onReset }: Props) {
 
         {polling && (
           <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center' }}>
-            Polling the backend every 4s — this stops once the wallet is funded or expires.
+            Polling the backend every 4s. Stops once the wallet is funded or expires.
           </Typography>
         )}
 

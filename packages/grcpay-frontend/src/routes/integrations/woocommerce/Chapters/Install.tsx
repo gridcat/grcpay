@@ -21,11 +21,10 @@ export function Install() {
         <Alert severity="info" sx={{ mt: 2 }}>
           The plugin download URL is
           {' '}
-          <NextMuiLink href="https://TBD-wordpress-plugin-url/" rel="nofollow">
+          <NextMuiLink href="https://TBD-wordpress-plugin-url/">
             TBD-wordpress-plugin-url
           </NextMuiLink>
-          {' '}
-          — replace this once the plugin is published.
+          . Replace this once the plugin is published.
         </Alert>
       </Box>
     </Box>

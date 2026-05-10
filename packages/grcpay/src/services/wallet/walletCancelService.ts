@@ -1,4 +1,6 @@
+/* eslint-disable max-classes-per-file */
 import { Wallet, WalletStatus } from '../../models/Wallet';
+import { db, now } from '../../lib/db';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
@@ -17,10 +19,6 @@ export class WalletCancelError extends Error {
  * money, and terminal states are already resolved.
  */
 export class WalletCancelServiceClass {
-  constructor(
-    private wallet = new Wallet(),
-  ) {}
-
   public async cancelWallet(wallet: Wallet): Promise<void> {
     if (wallet.status !== WalletStatus.new) {
       throw new WalletCancelError(
@@ -29,10 +27,11 @@ export class WalletCancelServiceClass {
     }
 
     log.info(`Merchant-initiated cancellation of wallet ${wallet.address}`);
-    await this.wallet.model.update({
-      where: { id: wallet.id! },
-      data: { status: WalletStatus.expired },
-    });
+    await db
+      .updateTable('wallets')
+      .set({ status: WalletStatus.expired, updated_at: now() })
+      .where('id', '=', BigInt(wallet.id!))
+      .execute();
 
     getEventEmitter<DbLogMessage>().emit('log', {
       walletId: wallet.id!,

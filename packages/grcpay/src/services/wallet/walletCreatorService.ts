@@ -1,5 +1,6 @@
 import { Wallet, WalletMode, WalletStatus } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
+import { db, now } from '../../lib/db';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
@@ -8,16 +9,16 @@ import { generateToken, hashToken } from '../../lib/walletToken';
 
 export class WalletsCreatorServiceClass {
   constructor(
-    private wallet = new Wallet(),
     private grcRpc = rpc,
   ) {}
 
   public async createWallet(
     amountRequired: number,
     recipient?: string,
-    mode: WalletMode = WalletMode.checkout,
+    mode?: WalletMode,
     lifespanSeconds?: number,
   ) {
+    const resolvedMode = mode ?? WalletMode.checkout;
     if (!amountRequired) {
       throw new Error('Required amount is required');
     }
@@ -50,7 +51,6 @@ export class WalletsCreatorServiceClass {
       }
     }
 
-    // generate new payment address
     let address: string;
     try {
       address = await this.grcRpc.getNewAddress();
@@ -68,23 +68,32 @@ export class WalletsCreatorServiceClass {
 
     // One-time token reveal: generate once, hash for storage, stash the
     // raw value on the Wallet instance so the presenter can include it
-    // in the POST response. Subsequent loads via fromModel leave
-    // `token` undefined so GETs never echo it back.
+    // in the POST response. Subsequent loads via fromRow leave `token`
+    // undefined so GETs never echo it back.
     const rawToken = generateToken();
     const tokenHash = hashToken(rawToken);
 
-    const newWallet = Wallet.fromModel(await this.wallet.model.create({
-      data: {
-        amount_required: amountRequiredHalford.valueOf(),
-        amount_recieved: 0,
-        status: WalletStatus.new,
+    const timestamp = now();
+    const inserted = await db
+      .insertInto('wallets')
+      .values({
         address,
-        recipient,
-        mode,
-        lifespan_seconds: lifespanSeconds ?? null,
+        recipient: recipient ?? null,
+        amount_required: amountRequiredHalford,
+        amount_recieved: BigInt(0),
+        amount_pending: BigInt(0),
+        status: WalletStatus.new,
+        mode: resolvedMode,
+        lifespan_seconds: lifespanSeconds == null ? null : BigInt(lifespanSeconds),
         token_hash: tokenHash,
-      },
-    }));
+        refund_attempts: BigInt(0),
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    const newWallet = Wallet.fromRow(inserted);
     newWallet.token = rawToken;
 
     const walletId = newWallet.id!;
@@ -111,7 +120,7 @@ export class WalletsCreatorServiceClass {
     getEventEmitter<DbLogMessage>().emit('log', {
       walletId,
       action: 'mode',
-      newStatus: mode,
+      newStatus: resolvedMode,
     });
     if (lifespanSeconds != null) {
       getEventEmitter<DbLogMessage>().emit('log', {

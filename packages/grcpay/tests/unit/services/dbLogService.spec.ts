@@ -1,23 +1,18 @@
 import { DbLogServiceClass, DbLogMessage } from '../../../src/services/dbLog/dbLogService';
 import { createMockEventEmitter } from '../../helpers/mocks';
-
-// Mock prisma
-const mockCreate = jest.fn().mockResolvedValue({});
-jest.mock('../../../src/lib/prisma', () => ({
-  getPrisma: () => ({
-    db_logs: {
-      create: mockCreate,
-    },
-  }),
-}));
+import { db } from '../../../src/lib/db';
+import { setupTestDb, truncateAll } from '../../helpers/db';
 
 describe('DbLogService', () => {
   let service: DbLogServiceClass;
   let mockEmitter: ReturnType<typeof createMockEventEmitter>;
 
-  beforeEach(() => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await truncateAll();
     mockEmitter = createMockEventEmitter();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     service = new DbLogServiceClass(mockEmitter as any);
   });
 
@@ -36,51 +31,43 @@ describe('DbLogService', () => {
       oldStatus: 'new',
       newStatus: 'funded',
     };
-
-    // Trigger the event
     mockEmitter.emit('log', message);
+    await new Promise((r) => setTimeout(r, 20));
 
-    // Wait for the async handler
-    await new Promise((r) => setTimeout(r, 10));
-
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        wallet_id: 42,
-        action: 'status',
-        old_status: 'new',
-        new_status: 'funded',
-      },
+    const rows = await db.selectFrom('db_logs').selectAll().execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      wallet_id: BigInt(42),
+      action: 'status',
+      old_status: 'new',
+      new_status: 'funded',
     });
   });
 
   it('handles optional fields', async () => {
     service.registerEventListener();
 
-    const message: DbLogMessage = {
-      walletId: 1,
-    };
+    mockEmitter.emit('log', { walletId: 1 });
+    await new Promise((r) => setTimeout(r, 20));
 
-    mockEmitter.emit('log', message);
-    await new Promise((r) => setTimeout(r, 10));
-
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        wallet_id: 1,
-        action: undefined,
-        old_status: undefined,
-        new_status: undefined,
-      },
+    const rows = await db.selectFrom('db_logs').selectAll().execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      wallet_id: BigInt(1),
+      action: null,
+      old_status: null,
+      new_status: null,
     });
   });
 
   it('still attempts db insert when previous call succeeded', async () => {
     service.registerEventListener();
 
-    // Fire two events - both should call create
     mockEmitter.emit('log', { walletId: 1, action: 'first' });
     mockEmitter.emit('log', { walletId: 2, action: 'second' });
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockCreate).toHaveBeenCalledTimes(2);
+    const rows = await db.selectFrom('db_logs').selectAll().execute();
+    expect(rows).toHaveLength(2);
   });
 });

@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'testing';
-process.env.DATABASE_URL = 'file::memory:';
+process.env.NETWORK = 'testnet';
+process.env.DATABASE_URL = ':memory:';
 process.env.GRC_RPC_USER = 'test';
 process.env.GRC_RPC_PASSWORD = 'test';
 process.env.GRC_RPC_HOST = 'localhost';

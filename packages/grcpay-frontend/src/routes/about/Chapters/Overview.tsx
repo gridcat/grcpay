@@ -16,8 +16,8 @@ export function Overview() {
           address, polls the daemon every few seconds to see how much has been
           received at it, and once the requested amount has arrived it forwards
           the payment to the merchant&apos;s wallet. No accounts, no custodial
-          storage, no middlemen — just a transparent on-chain settlement layer
-          that any merchant can run alongside their existing checkout.
+          storage, no middlemen. It&apos;s a transparent on-chain settlement
+          layer any merchant can run alongside their existing checkout.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           The whole flow is built around a small REST API. Drop it in next to your

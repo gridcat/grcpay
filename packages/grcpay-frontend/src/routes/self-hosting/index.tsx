@@ -7,7 +7,8 @@ import {
   Typography,
 } from '@mui/material';
 import { Header } from '@/components/Header/Header';
-import { Seo, SITE_NAME } from '@/components/Seo';
+import { Seo, SITE_NAME, SITE_URL } from '@/components/Seo';
+import { AUTHOR_GRIDCAT, breadcrumbList, PUBLISHER_ORG } from '@/lib/structuredData';
 import { Footer } from '@/components/Footer/Footer';
 import { GradientLine } from '@/components/GradientLine';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
@@ -36,6 +37,25 @@ export function Page() {
         description="How to run GRCpay on your own infrastructure: connect to an existing Gridcoin wallet, or stand up the whole stack with Docker Compose. Configuration reference, reverse proxy snippets, verification, and day-to-day operations."
         path="/self-hosting"
         ogType="article"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'TechArticle',
+              headline: `Self-hosting ${SITE_NAME}`,
+              description: 'How to run GRCpay on your own infrastructure with Docker Compose, configuration reference, reverse-proxy snippets, and operations.',
+              mainEntityOfPage: `${SITE_URL}/self-hosting`,
+              author: AUTHOR_GRIDCAT,
+              publisher: PUBLISHER_ORG,
+              articleSection: 'Operations',
+              proficiencyLevel: 'Expert',
+            },
+            breadcrumbList([
+              { name: 'Home', path: '/' },
+              { name: 'Self-hosting', path: '/self-hosting' },
+            ]),
+          ],
+        }}
       />
       <PageWrapper>
         <Header />
@@ -51,7 +71,7 @@ export function Page() {
               </Typography>
               <Typography gutterBottom variant="body1" component="p" sx={{ pb: 2 }}>
                 GRCpay is built to be run by the merchant who collects the
-                payments — that&apos;s the canonical setup, not a fallback.
+                payments. That&apos;s the canonical setup, not a fallback.
                 Two paths are covered: connecting to a Gridcoin wallet you
                 already operate, and standing up the whole stack from
                 scratch with Docker Compose.

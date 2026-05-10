@@ -20,11 +20,5 @@ export const menuItems: MenuEntry[] = [
   { label: 'Demo', href: '/demo' },
   { label: 'Self-host', href: '/self-hosting' },
   { label: 'API', href: '/developers' },
-  {
-    label: 'Integrations',
-    children: [
-      { label: 'Overview', href: '/integrations' },
-      { label: 'WooCommerce', href: '/integrations/woocommerce' },
-    ],
-  },
+  { label: 'Integrations', href: '/integrations' },
 ];

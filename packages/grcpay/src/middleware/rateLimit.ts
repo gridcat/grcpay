@@ -19,14 +19,14 @@ export function createRateLimiter(windowMs: number, maxRequests: number) {
   // `.unref()` so the timer doesn't pin the event loop (or Jest) open.
   setInterval(() => {
     const cutoff = Date.now() - windowMs;
-    for (const [ip, timestamps] of requests) {
+    requests.forEach((timestamps, ip) => {
       const valid = timestamps.filter((t) => t > cutoff);
       if (valid.length === 0) {
         requests.delete(ip);
       } else {
         requests.set(ip, valid);
       }
-    }
+    });
   }, windowMs).unref();
 
   return (req: Request, res: Response, next: NextFunction) => {

@@ -1,5 +1,5 @@
 import { getEventEmitter } from '../../lib/event';
-import { getPrisma } from '../../lib/prisma';
+import { db, now } from '../../lib/db';
 import { log } from '../../lib/log';
 
 export interface DbLogMessage {
@@ -20,14 +20,16 @@ export class DbLogServiceClass {
 
   private async logInDb(data: DbLogMessage) {
     try {
-      await getPrisma().db_logs.create({
-        data: {
-          wallet_id: data.walletId,
-          action: data.action,
-          old_status: data.oldStatus,
-          new_status: data.newStatus,
-        },
-      });
+      await db
+        .insertInto('db_logs')
+        .values({
+          wallet_id: BigInt(data.walletId),
+          action: data.action ?? null,
+          old_status: data.oldStatus ?? null,
+          new_status: data.newStatus ?? null,
+          created_at: now(),
+        })
+        .execute();
     } catch (e) {
       log.error(`Can not insert the record in DbLog: ${JSON.stringify(data)}`);
       throw (e);

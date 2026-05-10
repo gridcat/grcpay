@@ -1,5 +1,6 @@
 import HttpStatus from 'http-status-codes';
 import express, { Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
 import methodOverride from 'method-override';
 import morgan from 'morgan';
 import { config } from './config';
@@ -24,6 +25,11 @@ app.set('trust proxy', config.TRUST_PROXY_HOPS);
 app.set('port', config.PORT);
 
 // Set up middleware
+
+// Standard hardening headers. grcpay is JSON-only, so the HTML-side
+// CSP/frameguard defaults are mostly inert; narrow them if an endpoint
+// ever starts serving HTML.
+app.use(helmet());
 
 // Set up body parser in order to get post values
 app.use(express.json({ type: 'application/vnd.api+json' }));
@@ -96,9 +102,12 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     });
 });
 
-// Start web server using defined port (skip in test environment)
-export const server = config.isTesting
-  ? null
-  : app.listen(app.get('port'), () => {
+// Start the listener. Called from index.ts AFTER migrations have run
+// so the first inbound request can never hit a table that doesn't
+// exist yet. Tests don't call this — supertest binds to `app`
+// directly without opening a port.
+export function startServer(): void {
+  app.listen(app.get('port'), () => {
     log.info(`${packageJson.name} is running on port ${app.get('port')}`);
   });
+}

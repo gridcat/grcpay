@@ -1,6 +1,8 @@
 import { WalletFundedProcessorServiceClass } from '../../../src/services/wallet/walletFundedProcessorService';
 import { WalletStatus } from '../../../src/models/Wallet';
-import { createMockWalletModel, createMockRpc, createSampleWalletRow } from '../../helpers/mocks';
+import { createMockRpc } from '../../helpers/mocks';
+import { db } from '../../../src/lib/db';
+import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
 const mockEmit = jest.fn();
 jest.mock('../../../src/lib/event', () => ({
@@ -25,6 +27,7 @@ function wireFindSender(mockRpc: ReturnType<typeof createMockRpc>, grcAmount = 1
       txid: 'incoming_tx',
       amount: grcAmount,
       time: 1000,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
   ]);
   mockRpc.getRawTransaction.mockImplementation(async (txid: string) => {
@@ -32,6 +35,7 @@ function wireFindSender(mockRpc: ReturnType<typeof createMockRpc>, grcAmount = 1
       return {
         vin: [{ txid: 'input_tx', vout: 0 }],
         vout: [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
     return {
@@ -39,108 +43,100 @@ function wireFindSender(mockRpc: ReturnType<typeof createMockRpc>, grcAmount = 1
       vout: [
         { scriptPubKey: { addresses: [SENDER_ADDR] } },
       ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   });
 }
 
+async function readWallet(id: bigint) {
+  return db
+    .selectFrom('wallets')
+    .selectAll()
+    .where('id', '=', id)
+    .executeTakeFirstOrThrow();
+}
+
 describe('WalletFundedProcessorService', () => {
   let service: WalletFundedProcessorServiceClass;
-  let mockWallet: ReturnType<typeof createMockWalletModel>;
   let mockRpc: ReturnType<typeof createMockRpc>;
 
-  beforeEach(() => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
     jest.clearAllMocks();
-    mockWallet = createMockWalletModel();
+    await truncateAll();
     mockRpc = createMockRpc();
-    service = new WalletFundedProcessorServiceClass(mockWallet as any, mockRpc as any);
+    service = new WalletFundedProcessorServiceClass(mockRpc as never);
   });
 
   describe('processWithoutRecipient', () => {
     it('marks funded wallets without recipient as processed', async () => {
-      const wallet = createSampleWalletRow({
-        id: 1,
+      const row = await insertWallet({
         address: WALLET_ADDR,
         recipient: null,
-        status: 'funded',
-        amount_required: BigInt(1000000000), // 10 GRC
-        amount_recieved: BigInt(1000000000), // exact
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([wallet]) // without recipient
-        .mockResolvedValueOnce([]); // with recipient
 
       await service.processFunded();
 
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: {
-          status: WalletStatus.processed,
-          refund_tx: null,
-          refund_amount: null,
-          refund_attempts: 0,
-        },
-      });
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.refund_tx).toBeNull();
+      expect(after.refund_amount).toBeNull();
+      expect(after.refund_attempts).toBe(BigInt(0));
     });
 
-    it('emits log events for each processed wallet', async () => {
-      const w1 = createSampleWalletRow({
-        id: 1, address: 'Sa_1', recipient: null, status: 'funded',
-        amount_required: BigInt(100), amount_recieved: BigInt(100),
+    it('emits a status log event for each processed wallet', async () => {
+      await insertWallet({
+        address: 'Sa_1__addr_4567890abcdefghijklmnopq',
+        recipient: null,
+        status: WalletStatus.funded,
+        amount_required: BigInt(100),
+        amount_recieved: BigInt(100),
       });
-      const w2 = createSampleWalletRow({
-        id: 2, address: 'Sa_2', recipient: null, status: 'funded',
-        amount_required: BigInt(200), amount_recieved: BigInt(200),
+      await insertWallet({
+        address: 'Sa_2__addr_4567890abcdefghijklmnopq',
+        recipient: null,
+        status: WalletStatus.funded,
+        amount_required: BigInt(200),
+        amount_recieved: BigInt(200),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([w1, w2])
-        .mockResolvedValueOnce([]);
 
       await service.processFunded();
 
       const statusLogs = mockEmit.mock.calls.filter(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (c: any[]) => c[1].action === 'status' && c[1].newStatus === WalletStatus.processed,
       );
       expect(statusLogs).toHaveLength(2);
     });
 
     it('refunds overpayment to sender and marks processed when recipient is null', async () => {
-      const wallet = createSampleWalletRow({
-        id: 7,
+      const row = await insertWallet({
         address: WALLET_ADDR,
         recipient: null,
-        status: 'funded',
-        amount_required: BigInt(1000000000), // 10 GRC
-        amount_recieved: BigInt(1200000000), // 12 GRC, 2 GRC overpayment
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([wallet])
-        .mockResolvedValueOnce([]);
       wireFindSender(mockRpc);
       mockRpc.sendToAddress.mockResolvedValue('refund_tx_hash_no_recipient');
 
       await service.processFunded();
 
-      // Refund happened
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
       expect(mockRpc.sendToAddress).toHaveBeenCalledWith(SENDER_ADDR, expect.any(Number));
-      const refundAmount = mockRpc.sendToAddress.mock.calls[0][1];
-      expect(refundAmount).toBeCloseTo(1.999, 3); // overpayment - MIN_FEE
+      expect(mockRpc.sendToAddress.mock.calls[0][1]).toBeCloseTo(1.999, 3);
 
-      // Wallet marked processed with refund_tx + refund_amount recorded
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 7 },
-        data: {
-          status: WalletStatus.processed,
-          refund_tx: 'refund_tx_hash_no_recipient',
-          // overpayment - fee = 2 - 0.001 = 1.999 GRC = 199900000 halford
-          refund_amount: BigInt(199900000),
-          refund_attempts: 0,
-        },
-      });
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.refund_tx).toBe('refund_tx_hash_no_recipient');
+      expect(after.refund_amount).toBe(BigInt(199_900_000));
+      expect(after.refund_attempts).toBe(BigInt(0));
 
-      // Audit log for the refund
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
-        walletId: 7,
+        walletId: Number(row.id),
         action: 'overpayment_refund',
         newStatus: 'refund_tx_hash_no_recipient',
       }));
@@ -149,265 +145,186 @@ describe('WalletFundedProcessorService', () => {
 
   describe('processWithRecipient', () => {
     it('forwards exact required amount on exact payment, no refund', async () => {
-      const wallet = createSampleWalletRow({
-        id: 1,
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000), // 10 GRC
-        amount_recieved: BigInt(1000000000), // exact
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       mockRpc.sendToAddress.mockResolvedValue('tx_output_hash_123');
 
       await service.processFunded();
 
       expect(mockRpc.setTXfee).toHaveBeenCalledWith(0.001);
-      // Only one sendToAddress call — the forward
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
       expect(mockRpc.sendToAddress).toHaveBeenCalledWith(
         RECIPIENT_ADDR,
         expect.any(Number),
         WALLET_ADDR,
       );
-      const sentAmount = mockRpc.sendToAddress.mock.calls[0][1];
-      expect(sentAmount).toBeCloseTo(9.999, 3);
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: {
-          status: WalletStatus.processed,
-          tx_out: 'tx_output_hash_123',
-          refund_tx: null,
-          refund_amount: null,
-          refund_attempts: 0,
-        },
-      });
+      expect(mockRpc.sendToAddress.mock.calls[0][1]).toBeCloseTo(9.999, 3);
+
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('tx_output_hash_123');
+      expect(after.refund_tx).toBeNull();
+      expect(after.refund_amount).toBeNull();
     });
 
     it('refunds overpayment and forwards exact required amount when overpayment > fee', async () => {
-      const wallet = createSampleWalletRow({
-        id: 2,
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000), // 10 GRC
-        amount_recieved: BigInt(1200000000), // 12 GRC, 2 GRC overpayment
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       wireFindSender(mockRpc);
-      // First call = refund, second call = forward
       mockRpc.sendToAddress
         .mockResolvedValueOnce('refund_tx_abc')
         .mockResolvedValueOnce('forward_tx_def');
 
       await service.processFunded();
 
-      // Both calls happened
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(2);
-
-      // First: refund to sender, amount = overpayment - fee = 1.999
       const refundCall = mockRpc.sendToAddress.mock.calls[0];
       expect(refundCall[0]).toBe(SENDER_ADDR);
       expect(refundCall[1]).toBeCloseTo(1.999, 3);
-
-      // Second: forward to recipient, amount = required - fee = 9.999
       const forwardCall = mockRpc.sendToAddress.mock.calls[1];
       expect(forwardCall[0]).toBe(RECIPIENT_ADDR);
       expect(forwardCall[1]).toBeCloseTo(9.999, 3);
       expect(forwardCall[2]).toBe(WALLET_ADDR);
 
-      // Wallet update records both txids + the refund amount in halford
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 2 },
-        data: {
-          status: WalletStatus.processed,
-          tx_out: 'forward_tx_def',
-          refund_tx: 'refund_tx_abc',
-          refund_amount: BigInt(199900000), // 1.999 GRC in halford
-          refund_attempts: 0,
-        },
-      });
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('forward_tx_def');
+      expect(after.refund_tx).toBe('refund_tx_abc');
+      expect(after.refund_amount).toBe(BigInt(199_900_000));
 
-      // Audit log for the refund
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
-        walletId: 2,
+        walletId: Number(row.id),
         action: 'overpayment_refund',
         newStatus: 'refund_tx_abc',
       }));
     });
 
     it('skips refund on dust overpayment and forwards received amount (merchant tip)', async () => {
-      const wallet = createSampleWalletRow({
-        id: 3,
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000), // 10 GRC
-        amount_recieved: BigInt(1000050000), // 10.0005 GRC, 0.0005 overpayment (< 0.001 fee)
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_050_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       mockRpc.sendToAddress.mockResolvedValue('forward_tx_tip');
 
       await service.processFunded();
 
-      // Only ONE sendToAddress call (no refund)
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
-      // Amount = received - fee = 10.0005 - 0.001 = 9.9995 (merchant gets the tip)
-      const sentAmount = mockRpc.sendToAddress.mock.calls[0][1];
-      expect(sentAmount).toBeCloseTo(9.9995, 4);
+      expect(mockRpc.sendToAddress.mock.calls[0][1]).toBeCloseTo(9.9995, 4);
 
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 3 },
-        data: {
-          status: WalletStatus.processed,
-          tx_out: 'forward_tx_tip',
-          refund_tx: null,
-          refund_amount: null,
-          refund_attempts: 0,
-        },
-      });
+      const after = await readWallet(row.id);
+      expect(after.refund_tx).toBeNull();
+      expect(after.refund_amount).toBeNull();
 
-      // No overpayment_refund audit entry
       const refundLogs = mockEmit.mock.calls.filter(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (c: any[]) => c[1].action === 'overpayment_refund',
       );
       expect(refundLogs).toHaveLength(0);
     });
 
     it('absorbs overpayment into merchant payout when sender cannot be determined', async () => {
-      const wallet = createSampleWalletRow({
-        id: 4,
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000),
-        amount_recieved: BigInt(1200000000),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
-      // Sender cannot be found: listTransactions returns empty
       mockRpc.listTransactions.mockResolvedValue([]);
       mockRpc.sendToAddress.mockResolvedValue('forward_tx_no_sender');
 
       await service.processFunded();
 
-      // Only the forward happened — no refund call
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
-      // Forward amount = received - fee (merchant gets the overpayment as a tip)
-      const sentAmount = mockRpc.sendToAddress.mock.calls[0][1];
-      expect(sentAmount).toBeCloseTo(11.999, 3);
+      expect(mockRpc.sendToAddress.mock.calls[0][1]).toBeCloseTo(11.999, 3);
 
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 4 },
-        data: {
-          status: WalletStatus.processed,
-          tx_out: 'forward_tx_no_sender',
-          refund_tx: null,
-          refund_amount: null,
-          refund_attempts: 0,
-        },
-      });
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('forward_tx_no_sender');
+      expect(after.refund_tx).toBeNull();
+      expect(after.refund_amount).toBeNull();
     });
 
     it('leaves wallet funded and bumps refund_attempts when the refund tx fails (first attempt)', async () => {
-      const wallet = createSampleWalletRow({
-        id: 5,
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000),
-        amount_recieved: BigInt(1200000000),
-        refund_attempts: 0, // first attempt — backoff gate is a no-op
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
+        refund_attempts: 0,
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       wireFindSender(mockRpc);
       mockRpc.sendToAddress.mockRejectedValueOnce(new Error('wallet is locked'));
 
       await service.processFunded();
 
-      // Refund attempted, forward NOT attempted — we don't want to
-      // forward the customer's overpayment to the merchant until we've
-      // given the refund side a fair chance to succeed.
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
       expect(mockRpc.sendToAddress).toHaveBeenCalledWith(SENDER_ADDR, expect.any(Number));
 
-      // Wallet stays funded, refund_attempts climbs to 1.
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 5 },
-        data: { refund_attempts: 1 },
-      });
-      // Crucially: no status transition.
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.funded);
+      expect(after.refund_attempts).toBe(BigInt(1));
+
       const statusTransitions = mockEmit.mock.calls.filter(
-        (c: any[]) => c[1].action === 'status' && c[1].walletId === 5,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (c: any[]) => c[1].action === 'status' && c[1].walletId === Number(row.id),
       );
       expect(statusTransitions).toHaveLength(0);
 
-      // The refund_failed audit entry lands in db_logs.
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
-        walletId: 5,
+        walletId: Number(row.id),
         action: 'overpayment_refund_failed',
       }));
     });
 
     it('skips the refund attempt when the exponential-backoff window has not elapsed', async () => {
-      const wallet = createSampleWalletRow({
-        id: 10,
+      const justNow = new Date().toISOString();
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000),
-        amount_recieved: BigInt(1200000000),
-        refund_attempts: 2, // needs 2 * base (60s) elapsed
-        updated_at: new Date(), // just now — well under 60s
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
+        refund_attempts: 2,
+        updated_at: justNow,
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       wireFindSender(mockRpc);
 
       await service.processFunded();
 
-      // Neither the refund RPC nor the forward RPC was called — we
-      // skipped this wallet entirely for the cycle.
       expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
-      // And the wallet wasn't touched in the DB either (no bookkeeping
-      // update, no status transition).
-      expect(mockWallet.model.update).not.toHaveBeenCalled();
+      const after = await readWallet(row.id);
+      expect(after.refund_attempts).toBe(BigInt(2));
+      expect(after.updated_at).toBe(justNow);
     });
 
     it('falls back to forwarding full balance after MAX_REFUND_ATTEMPTS refund failures', async () => {
-      // Simulate the Nth attempt: the wallet arrives at the processor
-      // already carrying refund_attempts = MAX_REFUND_ATTEMPTS - 1 from
-      // previous cycles and an updated_at far enough in the past that
-      // the exponential backoff window has elapsed. This is the
-      // attempt that pushes it over the edge into the "abandoned"
-      // path, at which point the merchant payout must go through so
-      // the wallet doesn't wedge forever.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
       const { config } = require('../../../src/config');
-      const farInThePast = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
-      const wallet = createSampleWalletRow({
-        id: 9,
+      const farInThePast = new Date(Date.now() - 1000 * 60 * 60).toISOString();
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000),
-        amount_recieved: BigInt(1200000000),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
         refund_attempts: config.MAX_REFUND_ATTEMPTS - 1,
         updated_at: farInThePast,
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       wireFindSender(mockRpc);
       mockRpc.sendToAddress
         .mockRejectedValueOnce(new Error('wallet is still locked'))
@@ -415,46 +332,34 @@ describe('WalletFundedProcessorService', () => {
 
       await service.processFunded();
 
-      // Refund attempted (and failed), then the merchant forward
-      // proceeds anyway with the full received balance.
       expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(2);
       const forwardCall = mockRpc.sendToAddress.mock.calls[1];
       expect(forwardCall[0]).toBe(RECIPIENT_ADDR);
       expect(forwardCall[1]).toBeCloseTo(11.999, 3);
 
-      // Wallet marked processed, refund_attempts reset.
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 9 },
-        data: {
-          status: WalletStatus.processed,
-          tx_out: 'forward_tx_fallback',
-          refund_tx: null,
-          refund_amount: null,
-          refund_attempts: 0,
-        },
-      });
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('forward_tx_fallback');
+      expect(after.refund_tx).toBeNull();
+      expect(after.refund_amount).toBeNull();
+      expect(after.refund_attempts).toBe(BigInt(0));
     });
 
     it('sets wallet to error on forward RPC failure', async () => {
-      const wallet = createSampleWalletRow({
-        id: 6,
+      const row = await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(1000000000),
-        amount_recieved: BigInt(1000000000),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       mockRpc.sendToAddress.mockRejectedValue(new Error('RPC timeout'));
 
       await service.processFunded();
 
-      expect(mockWallet.model.update).toHaveBeenCalledWith({
-        where: { id: 6 },
-        data: { status: WalletStatus.error },
-      });
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.error);
+
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
         action: 'status',
         oldStatus: WalletStatus.funded,
@@ -463,17 +368,13 @@ describe('WalletFundedProcessorService', () => {
     });
 
     it('emits tx_out log event on successful forward', async () => {
-      const wallet = createSampleWalletRow({
-        id: 8,
+      await insertWallet({
         address: WALLET_ADDR,
-        status: 'funded',
         recipient: RECIPIENT_ADDR,
-        amount_required: BigInt(500000000),
-        amount_recieved: BigInt(500000000),
+        status: WalletStatus.funded,
+        amount_required: BigInt(500_000_000),
+        amount_recieved: BigInt(500_000_000),
       });
-      mockWallet.model.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([wallet]);
       mockRpc.sendToAddress.mockResolvedValue('txhash_456');
 
       await service.processFunded();
@@ -487,12 +388,10 @@ describe('WalletFundedProcessorService', () => {
 
   describe('no work', () => {
     it('does nothing when no funded wallets', async () => {
-      mockWallet.model.findMany.mockResolvedValue([]);
-
       await service.processFunded();
 
+      expect(mockRpc.setTXfee).not.toHaveBeenCalled();
       expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
-      expect(mockWallet.model.update).not.toHaveBeenCalled();
     });
   });
 });

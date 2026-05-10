@@ -14,19 +14,25 @@ import { Wallet } from '../../models/Wallet';
  *   funded / processed / …:    grc:ADDRESS
  */
 export class QrCodeServiceClass {
+  private async renderQr(uri: string, width = 300): Promise<string> {
+    const options: QRCodeToDataURLOptions = { width };
+    return QRCode.toDataURL(uri, options);
+  }
+
   public async generateQrCode(wallet: Wallet, width = 300): Promise<string> {
     const remainingHalford = wallet.amountRequired.valueOf() - wallet.amountRecieved.valueOf();
-    let uri: string;
-    if (remainingHalford > BigInt(0)) {
-      const left2pay = halford2grc(remainingHalford);
-      uri = `grc:${wallet.address}?amount=${left2pay}`;
-    } else {
-      uri = `grc:${wallet.address}`;
-    }
-    const options: QRCodeToDataURLOptions = {
-      width,
-    };
-    return QRCode.toDataURL(uri, options);
+    const uri = remainingHalford > BigInt(0)
+      ? `grc:${wallet.address}?amount=${halford2grc(remainingHalford)}`
+      : `grc:${wallet.address}`;
+    return this.renderQr(uri, width);
+  }
+
+  // Plain `grc:ADDRESS` QR for an address grcpay does not manage.
+  // Lets the QR controller return an indistinguishable 200 OK for
+  // unknown addresses, closing the status-code oracle on whether a
+  // given address was ever minted by this grcpay instance.
+  public async generatePlainAddressQrCode(address: string, width = 300): Promise<string> {
+    return this.renderQr(`grc:${address}`, width);
   }
 }
 

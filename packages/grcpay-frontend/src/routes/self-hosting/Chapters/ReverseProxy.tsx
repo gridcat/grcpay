@@ -11,7 +11,7 @@ export function ReverseProxy() {
       <Box component="article">
         <Typography gutterBottom variant="body1" component="p">
           GRCpay listens on plain HTTP. Don&apos;t expose port 7001
-          directly — terminate TLS at a reverse proxy on the host, and
+          directly. Terminate TLS at a reverse proxy on the host, and
           forward requests inward. Two common options:
         </Typography>
 
@@ -74,7 +74,7 @@ server {
           {' '}
           <code>/api</code>
           {' '}
-          prefix is a convention, not a requirement — GRCpay&apos;s
+          prefix is a convention, not a requirement. GRCpay&apos;s
           routes are mounted at the root (
           <code>/wallets</code>
           ,

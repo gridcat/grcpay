@@ -51,7 +51,7 @@ docker stop grcpay && docker rm grcpay
           <ListItem disableGutters>
             <ListItemText
               primary="The wallet's wallet.dat"
-              secondary="Snapshot ./wallet-data/wallet.dat on a schedule. This is your actual money. The wallet auto-refills its keypool as GRCpay calls getnewaddress, so any backup taken before a fresh batch of addresses is generated will be missing those keys — schedule backups frequently, or pause GRCpay around the snapshot."
+              secondary="Snapshot ./wallet-data/wallet.dat on a schedule. This is your actual money. The wallet auto-refills its keypool as GRCpay calls getnewaddress, so any backup taken before a fresh batch of addresses is generated will be missing those keys. Schedule backups frequently, or pause GRCpay around the snapshot."
             />
           </ListItem>
         </List>
@@ -101,7 +101,7 @@ docker compose logs -f grcpay`}
           <ListItem disableGutters>
             <ListItemText
               primary="Wallet ends up in 'error' status"
-              secondary="The expired-refund flow couldn't determine the original sender or the send call failed. The wallet stays parked for manual review — query the db_logs table for that wallet_id to see what went wrong, and refund manually if appropriate."
+              secondary="The expired-refund flow couldn't determine the original sender or the send call failed. The wallet stays parked for manual review. Query the db_logs table for that wallet_id to see what went wrong, and refund manually if appropriate."
             />
           </ListItem>
         </List>

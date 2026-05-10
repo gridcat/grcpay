@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 import { GridcoinRPC } from 'gridcoin-rpc';
 import { config } from '../config';
 import { log } from './log';
@@ -15,7 +16,7 @@ const wait = (ms: number) => new Promise((resolve) => {
 // across the full JOBS_INTERVAL cadence.
 const RPC_TIMEOUT_MS = 30_000;
 
-function withTimeout<T>(p: Promise<T>, method: string, ms = RPC_TIMEOUT_MS): Promise<T> {
+async function withTimeout<T>(p: Promise<T>, method: string, ms = RPC_TIMEOUT_MS): Promise<T> {
   let timer: NodeJS.Timeout;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(

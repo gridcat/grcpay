@@ -12,6 +12,7 @@ import { Footer } from '@/components/Footer/Footer';
 import { GradientLine } from '@/components/GradientLine';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
 import { Seo, SITE_NAME } from '@/components/Seo';
+import { breadcrumbList } from '@/lib/structuredData';
 import { PageWrapper } from '@/components/PageWrapper';
 import { WalletEntity } from '@/entities/WalletEntity';
 import { CreateWalletForm } from './CreateWalletForm';
@@ -26,6 +27,15 @@ export function Page() {
         title={`${SITE_NAME} :: Demo`}
         description="Try GRCpay live: create a payment wallet against the running backend and watch its lifecycle in real time."
         path="/demo"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@graph': [
+            breadcrumbList([
+              { name: 'Home', path: '/' },
+              { name: 'Demo', path: '/demo' },
+            ]),
+          ],
+        }}
       />
       <PageWrapper>
         <Header />
@@ -45,8 +55,10 @@ export function Page() {
             {' '}
             <code>grcpay.gridcoin.club</code>
             {' '}
-            install — free for now, no SLA, no warranty. For production we
-            strongly recommend
+            install. It&apos;s free for now, no SLA, no warranty (see the
+            {' '}
+            <Link href="/disclaimer#public-instance" style={{ color: 'inherit' }}>disclaimer</Link>
+            ). For production we strongly recommend
             {' '}
             <Link href="/about#hosting" style={{ color: 'inherit' }}>running your own instance</Link>
             {' '}

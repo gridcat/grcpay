@@ -1,16 +1,14 @@
-import { wallets } from '@prisma/client';
-import { Wallet, WalletMode, WalletStatus } from '../../models/Wallet';
+import { WalletMode, WalletStatus } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
+import { db, now } from '../../lib/db';
 import { config } from '../../config';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
 import { canRetryRefund } from '../../lib/refundBackoff';
-
-// MIN_FEE in halford so overpayment comparisons stay in BigInt and
-// don't round-trip through floating point.
-const minFeeHalford = BigInt(Math.round(config.MIN_FEE * config.HALFORD));
+import { MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import type { WalletRow } from '../../lib/database';
 
 // outcome:
 //   none      — no refund needed (exact, dust, sender unknown). Forward as normal.
@@ -31,25 +29,24 @@ interface RefundResult {
 
 export class WalletFundedProcessorServiceClass {
   constructor(
-    private wallet = new Wallet(),
     private grcRpc = rpc,
   ) {}
 
   public async processFunded(): Promise<void> {
     log.info('Process funded wallets');
 
-    // Fast path: if there are no funded wallets at all, skip every RPC
-    // call. Without this guard the processor would still hit setTXfee
-    // on every tick — a bug that previously wedged the job loop for
-    // over an hour when the wallet daemon's RPC got stuck, because the
-    // loop entered this method, blocked on setTXfee, and never returned
-    // even though there was literally nothing to process.
-    const fundedCount = await this.wallet.model.count({
-      where: { status: WalletStatus.funded, mode: WalletMode.checkout },
-    });
-    if (fundedCount === 0) {
-      return;
-    }
+    // Single SELECT covers both branches; we partition by recipient
+    // in JS. Critically, this also gates the setTXfee call below — an
+    // empty result means we skip the RPC entirely. Without that gate
+    // the processor would still hit setTXfee on every tick, which
+    // previously wedged the job loop for over an hour when the wallet
+    // daemon's RPC got stuck (loop entered, blocked on setTXfee,
+    // never returned even though there was literally nothing to do).
+    const funded = await this.loadFunded();
+    if (!funded.length) return;
+
+    const withRecipient = funded.filter((w) => w.recipient !== null);
+    const withoutRecipient = funded.filter((w) => w.recipient === null);
 
     // INVARIANT: setTXfee is daemon-wide and persistent. The amount
     // math below assumes MIN_FEE for the duration of this cycle — if
@@ -63,21 +60,22 @@ export class WalletFundedProcessorServiceClass {
       return;
     }
 
-    await this.processWithoutRecipient();
-    await this.processWithRecipient();
+    await this.processWithoutRecipient(withoutRecipient);
+    await this.processWithRecipient(withRecipient);
   }
 
-  private shouldDeferForBackoff(wallet: wallets): boolean {
-    if (wallet.refund_attempts === 0) return false;
-    if (canRetryRefund(wallet.refund_attempts, wallet.updated_at)) return false;
+  private shouldDeferForBackoff(wallet: WalletRow): boolean {
+    const attempts = Number(wallet.refund_attempts);
+    if (attempts === 0) return false;
+    if (canRetryRefund(attempts, new Date(wallet.updated_at))) return false;
     log.info(
       `Skipping refund retry on ${wallet.address} — backoff window not elapsed `
-      + `(attempts=${wallet.refund_attempts})`,
+      + `(attempts=${attempts})`,
     );
     return true;
   }
 
-  private async refundOverpaymentIfAny(wallet: wallets): Promise<RefundResult> {
+  private async refundOverpaymentIfAny(wallet: WalletRow): Promise<RefundResult> {
     const noRefund: RefundResult = {
       outcome: 'none',
       txid: null,
@@ -114,7 +112,7 @@ export class WalletFundedProcessorServiceClass {
         + `${wallet.address} (tx ${tx}).`,
       );
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'overpayment_refund',
         newStatus: tx,
       });
@@ -129,13 +127,13 @@ export class WalletFundedProcessorServiceClass {
         refundedHalford: overpayment - minFeeHalford,
       };
     } catch (e) {
-      const attempts = wallet.refund_attempts + 1;
+      const attempts = Number(wallet.refund_attempts) + 1;
       log.error(
         `Refund attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS} failed for `
         + `${wallet.address} (${refundAmountGrc} GRC to ${sender}): ${e}`,
       );
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'overpayment_refund_failed',
         newStatus: `attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS}`,
       });
@@ -156,21 +154,21 @@ export class WalletFundedProcessorServiceClass {
     }
   }
 
-  private async processWithoutRecipient(): Promise<void> {
+  private async loadFunded(): Promise<WalletRow[]> {
+    return db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('status', '=', WalletStatus.funded)
+      // Defensive: settlement math assumes checkout semantics. Keep
+      // the mode filter explicit so a future non-checkout wallet that
+      // somehow reached `funded` can't trigger settlement.
+      .where('mode', '=', WalletMode.checkout)
+      .execute();
+  }
+
+  private async processWithoutRecipient(fundedWallets: WalletRow[]): Promise<void> {
     log.info('Process funded without recipients');
-    const fundedWallets = await this.wallet.model.findMany({
-      where: {
-        status: WalletStatus.funded,
-        recipient: null,
-        // Defensive: settlement math assumes checkout semantics.
-        // Keep a second filter here so a future non-checkout wallet
-        // that somehow reached `funded` can't trigger settlement.
-        mode: WalletMode.checkout,
-      },
-    });
-    if (!fundedWallets.length) {
-      return;
-    }
+    if (!fundedWallets.length) return;
     log.info(`${fundedWallets.length} wallet(s) to be processed`);
     for (const wallet of fundedWallets) {
       if (this.shouldDeferForBackoff(wallet)) continue;
@@ -178,10 +176,14 @@ export class WalletFundedProcessorServiceClass {
       const refund = await this.refundOverpaymentIfAny(wallet);
 
       if (refund.outcome === 'retry') {
-        await this.wallet.model.update({
-          where: { id: wallet.id },
-          data: { refund_attempts: wallet.refund_attempts + 1 },
-        });
+        await db
+          .updateTable('wallets')
+          .set({
+            refund_attempts: BigInt(Number(wallet.refund_attempts) + 1),
+            updated_at: now(),
+          })
+          .where('id', '=', wallet.id)
+          .execute();
         continue;
       }
       if (refund.outcome === 'abandoned') {
@@ -191,17 +193,19 @@ export class WalletFundedProcessorServiceClass {
         );
       }
 
-      await this.wallet.model.update({
-        where: { id: wallet.id },
-        data: {
+      await db
+        .updateTable('wallets')
+        .set({
           status: WalletStatus.processed,
           refund_tx: refund.txid,
           refund_amount: refund.txid ? refund.refundedHalford : null,
-          refund_attempts: 0,
-        },
-      });
+          refund_attempts: BigInt(0),
+          updated_at: now(),
+        })
+        .where('id', '=', wallet.id)
+        .execute();
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'status',
         oldStatus: WalletStatus.funded,
         newStatus: WalletStatus.processed,
@@ -209,29 +213,22 @@ export class WalletFundedProcessorServiceClass {
     }
   }
 
-  private async processWithRecipient(): Promise<void> {
+  private async processWithRecipient(fundedWallets: WalletRow[]): Promise<void> {
     log.info('Process funded wallets with recipient');
-    const fundedWallets = await this.wallet.model.findMany({
-      where: {
-        status: WalletStatus.funded,
-        recipient: {
-          not: null,
-        },
-        mode: WalletMode.checkout,
-      },
-    });
-    for (let i = 0; i < fundedWallets.length; i++) {
-      const wallet = fundedWallets[i];
-
+    for (const wallet of fundedWallets) {
       if (this.shouldDeferForBackoff(wallet)) continue;
 
       const refund = await this.refundOverpaymentIfAny(wallet);
 
       if (refund.outcome === 'retry') {
-        await this.wallet.model.update({
-          where: { id: wallet.id },
-          data: { refund_attempts: wallet.refund_attempts + 1 },
-        });
+        await db
+          .updateTable('wallets')
+          .set({
+            refund_attempts: BigInt(Number(wallet.refund_attempts) + 1),
+            updated_at: now(),
+          })
+          .where('id', '=', wallet.id)
+          .execute();
         continue;
       }
       if (refund.outcome === 'abandoned') {
@@ -252,38 +249,39 @@ export class WalletFundedProcessorServiceClass {
           forwardAmountGrc,
           wallet.address,
         );
-        await this.wallet.model.update({
-          where: {
-            id: wallet.id,
-          },
-          data: {
+        await db
+          .updateTable('wallets')
+          .set({
             status: WalletStatus.processed,
             tx_out: tx,
             refund_tx: refund.txid,
             refund_amount: refund.txid ? refund.refundedHalford : null,
-            refund_attempts: 0,
-          },
-        });
+            refund_attempts: BigInt(0),
+            updated_at: now(),
+          })
+          .where('id', '=', wallet.id)
+          .execute();
         getEventEmitter<DbLogMessage>().emit('log', {
-          walletId: wallet.id,
+          walletId: Number(wallet.id),
           action: 'status',
           oldStatus: WalletStatus.funded,
           newStatus: WalletStatus.processed,
         });
         getEventEmitter<DbLogMessage>().emit('log', {
-          walletId: wallet.id,
+          walletId: Number(wallet.id),
           action: 'tx_out',
           oldStatus: '',
           newStatus: tx,
         });
       } catch (e) {
         log.error(`Failed to process funded wallet ${wallet.address}: ${e}`);
-        await this.wallet.model.update({
-          where: { id: wallet.id },
-          data: { status: WalletStatus.error },
-        });
+        await db
+          .updateTable('wallets')
+          .set({ status: WalletStatus.error, updated_at: now() })
+          .where('id', '=', wallet.id)
+          .execute();
         getEventEmitter<DbLogMessage>().emit('log', {
-          walletId: wallet.id,
+          walletId: Number(wallet.id),
           action: 'status',
           oldStatus: WalletStatus.funded,
           newStatus: WalletStatus.error,

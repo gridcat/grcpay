@@ -1,22 +1,5 @@
 import supertest from 'supertest';
 
-// Mock prisma before importing app
-jest.mock('../../../src/lib/prisma', () => ({
-  getPrisma: () => ({
-    wallets: {
-      findMany: jest.fn().mockResolvedValue([]),
-      findFirst: jest.fn().mockResolvedValue(null),
-      create: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-    },
-    db_logs: {
-      create: jest.fn().mockResolvedValue({}),
-    },
-  }),
-  disconnect: jest.fn(),
-}));
-
 jest.mock('../../../src/lib/gridcoin', () => ({
   rpc: {
     getWalletInfo: jest.fn(),
@@ -26,11 +9,16 @@ jest.mock('../../../src/lib/gridcoin', () => ({
   connect: jest.fn().mockResolvedValue(true),
 }));
 
+// eslint-disable-next-line import/first
 import { app } from '../../../src/api';
+// eslint-disable-next-line import/first
+import { setupTestDb } from '../../helpers/db';
 
 const request = supertest(app);
 
 describe('GET /status', () => {
+  beforeAll(setupTestDb);
+
   it('returns 200 with service info', async () => {
     const res = await request.get('/status');
 
@@ -48,6 +36,8 @@ describe('GET /status', () => {
 });
 
 describe('404 handling', () => {
+  beforeAll(setupTestDb);
+
   it('returns 404 for unknown routes', async () => {
     const res = await request.get('/nonexistent');
 

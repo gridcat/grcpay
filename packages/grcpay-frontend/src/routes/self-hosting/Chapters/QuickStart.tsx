@@ -14,8 +14,8 @@ export function QuickStart() {
           {' '}
           <code>gridcoinresearchd</code>
           {' '}
-          somewhere — on the same host, on another machine in your LAN, or
-          inside a container you set up earlier — this is the smallest
+          somewhere (on the same host, on another machine in your LAN, or
+          inside a container you set up earlier), this is the smallest
           possible install. One
           {' '}
           <code>docker run</code>
@@ -95,7 +95,7 @@ docker run -d \\
           {' '}
           <code>host.docker.internal</code>
           {' '}
-          instead — and on Linux you also need
+          instead. On Linux you also need
           {' '}
           <code>--add-host=host.docker.internal:host-gateway</code>
           .
@@ -134,7 +134,7 @@ docker run -d \\
           {' '}
           <i>&ldquo;Connecting to the gridcoin wallet…&rdquo;</i>
           {' '}
-          repeating forever, the RPC connection is failing — check the
+          repeating forever, the RPC connection is failing. Check the
           host, port, credentials, and
           {' '}
           <code>rpcallowip</code>

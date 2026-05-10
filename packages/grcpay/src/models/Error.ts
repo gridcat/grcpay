@@ -1,3 +1,5 @@
+import { StatusCodes } from 'http-status-codes';
+
 export const BAD_PARAMETER = 470;
 
 export class ErrorModel {
@@ -9,7 +11,7 @@ export class ErrorModel {
 
   public static BAD_PARAMETER = 470;
 
-  public static NOT_FOUND = 404;
+  public static NOT_FOUND = StatusCodes.NOT_FOUND;
 
   constructor(
     status: number,

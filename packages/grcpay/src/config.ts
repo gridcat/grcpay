@@ -3,21 +3,85 @@ import path from 'path';
 import packageJson from '../package.json';
 
 interface Config {
+  // Which Gridcoin network this instance is anchored to. Required and
+  // validated against {'mainnet','testnet'} so a typo or omission fails
+  // loud at startup instead of silently inheriting the wrong identity.
+  // Pure label — the actual chain is selected by GRC_RPC_HOST/PORT.
+  NETWORK: 'mainnet' | 'testnet';
+  // SQLite database location. Either:
+  //   * a filesystem path (absolute or relative to the package root)
+  //   * a `file:...` URL (kept for drop-in compatibility with
+  //     deployments that still ship the legacy schema.prisma value)
+  //   * `:memory:` for an ephemeral in-memory DB (used by tests)
+  // No default — a missing value fails loudly at startup rather
+  // than silently writing to a throwaway in-memory DB.
   DATABASE_URL: string;
+  // Credentials for the Gridcoin wallet daemon's JSON-RPC interface.
+  // Optional because the dev wallet runs without RPC auth; production
+  // containers supply both via env file at deploy time.
   GRC_RPC_USER?: string;
   GRC_RPC_PASSWORD?: string;
+  // Host and port of the Gridcoin wallet daemon. In the default
+  // docker-compose setup GRC_RPC_HOST is the service name "wallet"
+  // and GRC_RPC_PORT is 47812 (mainnet RPC). Required — we don't
+  // have a sensible fallback for where the blockchain lives.
   GRC_RPC_HOST: string;
   GRC_RPC_PORT: number;
+  // Convenience mirrors of NODE_ENV. isProduction gates behaviour
+  // that should only run in prod (stricter logging, real cron
+  // scheduling); isTesting disables background jobs so unit tests
+  // don't fire RPC calls or mutate the DB from timers.
   isProduction: boolean;
   isTesting: boolean;
+  // HTTP listener port for the Express app. Defaults to
+  // package.json#port (7001) so local dev matches the docker-compose
+  // and nginx reverse-proxy expectations.
   PORT: number;
+  // How long a payment wallet stays active before it's considered
+  // expired. After this window the monitor stops watching for new
+  // funds and (if a non-zero balance arrived) the refund flow
+  // kicks in. 2 hours is a deliberate compromise: long enough to
+  // cover a slow checkout + bank-to-exchange transfer, short enough
+  // that abandoned carts stop burning RPC cycles within the same
+  // browsing session.
   LIFE_SPAN: number;
+  // Main job-loop tick in seconds. Every tick the funded/expired/
+  // refund processors run one pass over eligible wallets. Default
+  // 10s trades a few seconds of checkout latency for ~6 RPC probes
+  // per minute per active wallet, which is what the daemon can
+  // comfortably sustain.
   JOBS_INTERVAL: number;
+  // Satoshi-equivalent denominator for Gridcoin: 1 GRC = 100_000_000
+  // "halfords". RPC returns amounts in GRC (decimal); we convert
+  // to integer halfords internally to avoid float drift when
+  // comparing received vs required or computing refund amounts.
   HALFORD: number;
+  // Minimum transaction fee (in GRC) reserved when forwarding or
+  // refunding. Subtracted from the amount sent so the outgoing tx
+  // is guaranteed to be accepted by the network without dipping
+  // below the daemon's relay-fee floor.
   MIN_FEE: number;
+  // How long (seconds) past a wallet's terminal state we keep
+  // watching the address for late-arriving customer payments —
+  // the "a customer paid after the checkout page timed out"
+  // rescue path. Past this horizon we stop polling.
   LATE_PAYMENT_WINDOW: number;
+  // How often (seconds) the late-payment sweeper runs over
+  // terminal wallets inside LATE_PAYMENT_WINDOW. Separate from
+  // JOBS_INTERVAL because it's an edge-case rescue, not a
+  // latency-sensitive flow. Set to 0 to disable the sweep.
   LATE_PAYMENT_CHECK_INTERVAL: number;
+  // Max number of refund RPC failures before the funded
+  // processor gives up and forwards the received balance to
+  // the merchant instead. Protects against a permanently
+  // locked or unreachable wallet wedging the job loop.
   MAX_REFUND_ATTEMPTS: number;
+  // Exponential-backoff base (seconds) between refund retries.
+  // Attempt N is gated by REFUND_RETRY_BASE_DELAY * 2^(N-1)
+  // seconds since the last update, so the default 30s yields
+  // 30s / 1m / 2m / 4m — ~7.5 minutes of headroom for an operator
+  // to unlock the wallet before MAX_REFUND_ATTEMPTS is reached
+  // (locked wallet is the usual cause of refund failure).
   REFUND_RETRY_BASE_DELAY: number;
   // Minimum number of block confirmations required before a customer's
   // payment counts toward the wallet's settled balance. The balance
@@ -35,6 +99,14 @@ interface Config {
   // WooCommerce plugin polls GET /wallets/:id every 5 seconds per
   // open checkout — 12 req/min/tab just for the happy path, before
   // you count QR refreshes or multiple concurrent customers.
+  //
+  // The limits stay deliberately generous because integrators that
+  // create wallets server-to-server (a marketplace backend like
+  // grcbazaar, an on-site donation widget, a crowdfunding host) all
+  // appear to grcpay as a single source IP. CORS is `*` by design —
+  // these per-IP buckets are the primary brake on abuse, not a tight
+  // origin allowlist, so they need enough headroom for one real
+  // integrator's peak hour without 429ing.
   RATE_LIMIT_WALLET_CREATE_PER_MIN: number;
   RATE_LIMIT_WALLET_READ_PER_MIN: number;
   RATE_LIMIT_WALLET_DELETE_PER_MIN: number;
@@ -76,6 +148,7 @@ nconf
   // 2. Environment variables
   .env({
     whitelist: [
+      'NETWORK',
       'DATABASE_URL',
       'CHECK_INTERVAL_SECONDS',
       'GRC_RPC_USER',
@@ -115,66 +188,16 @@ nconf
     JOBS_INTERVAL: 1 * 10,
     HALFORD: 100000000,
     MIN_FEE: 0.001,
-    // How long after a wallet reaches a terminal state we still watch
-    // it for late-arriving customer payments. Past this window we
-    // assume any stale checkout page that might have still had the
-    // address cached is long gone, so funds sent later are either an
-    // operator problem or somebody doing something weird — either
-    // way, not worth polling for. 7 days is the default cache/session
-    // horizon for most e-commerce frontends.
     LATE_PAYMENT_WINDOW: 60 * 60 * 24 * 7, // 7 days
-    // How often the late-payment processor sweeps terminal wallets
-    // inside the window. This is an edge-case rescue path, not a
-    // latency-sensitive flow, so it runs on its own slow timer rather
-    // than on every main-loop tick. Default 1 hour: good enough to
-    // refund a confused customer on the same shopping session, cheap
-    // enough to be fine even with thousands of historical wallets.
-    // Operators who don't want this sweep at all can set
-    // LATE_PAYMENT_CHECK_INTERVAL=0 in the env — index.ts treats 0
-    // as "disabled" and skips scheduling the timer entirely.
     LATE_PAYMENT_CHECK_INTERVAL: 60 * 60, // 1 hour
-    // How many times a refund RPC call is allowed to fail before the
-    // funded processor gives up and falls back to forwarding the full
-    // received balance to the merchant.
     MAX_REFUND_ATTEMPTS: 5,
-    // Exponential backoff base for refund retries, in seconds. After
-    // failure N the next attempt is gated by
-    // REFUND_RETRY_BASE_DELAY * 2^(N-1) seconds since the last update
-    // — so with the default 30s the intervals are 30s, 1m, 2m, 4m,
-    // spanning ~7.5 minutes before the MAX_REFUND_ATTEMPTS cap kicks
-    // in. That window exists so a real human operator has time to
-    // actually unlock the wallet (the usual cause of a locked-wallet
-    // refund failure) before grcpay gives up.
     REFUND_RETRY_BASE_DELAY: 30,
-    // Minimum block confirmations required before a tx counts as
-    // settled. 2 is a sane default for e-commerce-grade hardening
-    // against same-block reorgs; operators running on a trusted or
-    // private testnet can set MIN_CONFIRMATIONS=0 in the env to
-    // accept 0-conf txs if they'd rather trade safety for latency.
     MIN_CONFIRMATIONS: 2,
-    // Write endpoints — tight. POST /wallets mints a fresh gridcoin
-    // address (RPC call + key derivation); 10/min/IP is plenty for
-    // one merchant's checkout flow and short of any abuse budget.
-    RATE_LIMIT_WALLET_CREATE_PER_MIN: 10,
-    // Read endpoint — generous. The WooCommerce plugin polls
-    // GET /wallets/:id every 5 seconds per open thank-you page,
-    // so a single customer burns 12 req/min before anyone else
-    // shows up. 300 covers ~25 concurrent customers sharing one
-    // NAT/proxy IP with comfortable headroom.
-    RATE_LIMIT_WALLET_READ_PER_MIN: 300,
-    RATE_LIMIT_WALLET_DELETE_PER_MIN: 10,
-    // QR endpoint — intentionally public for <img> embedding. Cap
-    // is higher than create/delete but still bounded: the QR is
-    // ~3KB of base64 PNG per request and the renderer is cheap.
-    RATE_LIMIT_QR_PER_MIN: 120,
-    RATE_LIMIT_RATES_PER_MIN: 60,
-    // Circuit breaker defaults. Five consecutive RPC failures
-    // (timeouts or errors) flip the breaker open; it fast-fails
-    // every subsequent call for 30 seconds before probing with
-    // one tentative request. Matches the RPC timeout budget —
-    // five failed 30s calls is already 2.5 minutes of misery for
-    // the job loop, any more and we're just wasting cycles on a
-    // daemon that isn't coming back on its own.
+    RATE_LIMIT_WALLET_CREATE_PER_MIN: 300,
+    RATE_LIMIT_WALLET_READ_PER_MIN: 1800,
+    RATE_LIMIT_WALLET_DELETE_PER_MIN: 300,
+    RATE_LIMIT_QR_PER_MIN: 1200,
+    RATE_LIMIT_RATES_PER_MIN: 600,
     RPC_BREAKER_THRESHOLD: 5,
     RPC_BREAKER_COOLDOWN_MS: 30_000,
     TRUST_PROXY_HOPS: 1,
@@ -185,10 +208,16 @@ nconf
 // the dev wallet runs without RPC auth, and prod creds are supplied
 // via env files at deploy time.
 checkConfig([
+  'NETWORK',
   'DATABASE_URL',
   'GRC_RPC_HOST',
   'GRC_RPC_PORT',
   'PORT',
 ]);
+
+const networkValue = nconf.get('NETWORK');
+if (networkValue !== 'mainnet' && networkValue !== 'testnet') {
+  throw new Error(`NETWORK must be either 'mainnet' or 'testnet', got: ${networkValue}`);
+}
 
 export const config = Object.freeze(nconf.get()) as Config;

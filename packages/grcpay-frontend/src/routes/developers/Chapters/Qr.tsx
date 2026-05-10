@@ -24,7 +24,7 @@ export function Qr() {
           {' '}
           <code>{'<img>'}</code>
           {' '}
-          tag — no client-side QR library required.
+          tag. No client-side QR library required.
         </Typography>
         <Endpoint
           method="GET"
@@ -63,7 +63,7 @@ imgEl.src = json.data.attributes.qr;`}
           {' '}
           <code>filter[width]</code>
           {' '}
-          query parameter is optional — defaults to 256 pixels, must be
+          query parameter is optional: defaults to 256 pixels, must be
           between 1 and 999.
         </Typography>
       </Box>

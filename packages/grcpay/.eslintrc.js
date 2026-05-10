@@ -27,6 +27,30 @@ module.exports = {
     '@typescript-eslint/no-shadow': ['error'],
     'no-useless-constructor': 0,
     '@typescript-eslint/no-useless-constructor': ['error'],
+    'no-empty-function': ['error', { allow: ['constructors'] }],
+    'no-unused-vars': 'off',
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+    ],
+    // airbnb bans for-in/for-of wholesale. for-in stays banned (it's
+    // genuinely bug-prone), for-of is removed — it's idiomatic TS and
+    // the only clean option when the loop body awaits.
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: 'ForInStatement',
+        message: 'for-in iterates the entire prototype chain; use Object.keys/values/entries instead.',
+      },
+      {
+        selector: 'LabeledStatement',
+        message: 'Labels are a sign of poorly structured control flow.',
+      },
+      {
+        selector: 'WithStatement',
+        message: '`with` is disallowed in strict mode.',
+      },
+    ],
   },
   overrides: [
     {
@@ -36,6 +60,27 @@ module.exports = {
       files: '*.spec.js',
       rules: {
         'no-unused-expressions': 'off',
+      },
+    },
+    {
+      // Tests mock freely — `any` is explicitly allowed here to keep
+      // spec files terse. Formatting / import-order nits also relaxed
+      // since they're noise in fixtures.
+      files: ['tests/**/*.ts', '**/*.spec.ts'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/ban-types': 'off',
+        'global-require': 'off',
+        'import/first': 'off',
+        'import/order': 'off',
+        'no-promise-executor-return': 'off',
+        'max-len': 'off',
+        'max-classes-per-file': 'off',
+        'object-curly-newline': 'off',
+        'object-property-newline': 'off',
+        'function-paren-newline': 'off',
+        'function-call-argument-newline': 'off',
+        'no-multi-spaces': 'off',
       },
     },
   ],

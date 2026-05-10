@@ -1,4 +1,3 @@
-import { wallets } from '@prisma/client';
 import yayson from 'yayson';
 import { Wallet } from '../models/Wallet';
 import { Attributes } from './types';
@@ -8,7 +7,7 @@ const { Presenter } = yayson();
 export class QrPresenter extends Presenter {
   public static type = 'qrs';
 
-  public selfLinks(instance: wallets): string {
+  public selfLinks(instance: Wallet): string {
     return `/wallets/${this.id(instance)}/qr`;
   }
 
@@ -18,7 +17,7 @@ export class QrPresenter extends Presenter {
     };
   }
 
-  public id(instance: wallets): string {
+  public id(instance: Wallet): string {
     return instance.address;
   }
 }

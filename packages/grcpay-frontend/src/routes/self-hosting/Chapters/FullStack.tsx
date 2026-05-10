@@ -24,20 +24,18 @@ export function FullStack() {
           {' '}
           <NextMuiLink
             href="https://github.com/gridcoin-community/gridcoin-docker"
-            rel="nofollow"
             color="primary"
           >
             gridcoin-community/gridcoin-docker
           </NextMuiLink>
           , but that&apos;s a build environment (
           <code>gridcoincommunity/grc-dev</code>
-          ) for compiling the wallet from source — not a runtime daemon
+          ) for compiling the wallet from source, not a runtime daemon
           image. For a ready-to-run headless daemon, the community
           maintains
           {' '}
           <NextMuiLink
             href="https://github.com/boris1993/gridcoin-headless-docker"
-            rel="nofollow"
             color="primary"
           >
             boris1993/gridcoin-headless-docker

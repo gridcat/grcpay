@@ -6,6 +6,7 @@ import { ErrorModel } from '../models/Error';
 import { WalletsFinderService } from '../services/wallet/walletFinderService';
 import { QrCodeService } from '../services/qr/qrCodeService';
 import { QrPresenter } from '../presenters/qr.presenter';
+import { GRC_ADDRESS_PATTERN } from '../lib/address';
 
 export class QrController extends Controller {
   constructor(
@@ -21,30 +22,53 @@ export class QrController extends Controller {
   }
 
   public async getQrByAddress(address: string): Promise<void> {
-    const width = this.useFilters['width'] as string | undefined;
-    try {
-      const wallet = await this.walletFinderService.findWalletByAddress(address);
-      let qrWidth: number | undefined;
-      const widthNum = Number(width);
-      if (widthNum && widthNum > 0 && widthNum < 1000) {
-        qrWidth = widthNum;
-      }
-      const qrCodeString = await this.qrService.generateQrCode(wallet, qrWidth);
-      wallet.qr = qrCodeString;
+    if (!GRC_ADDRESS_PATTERN.test(address)) {
       this.res
-        .status(StatusCodes.OK)
-        .send(this.render<Wallet>(wallet));
-    } catch (e: unknown) {
-      this.res
-        .status(StatusCodes.NOT_FOUND)
+        .status(StatusCodes.BAD_REQUEST)
         .send({
           errors: [
             new ErrorModel(
-              StatusCodes.NOT_FOUND,
-              getReasonPhrase(StatusCodes.NOT_FOUND),
+              StatusCodes.BAD_REQUEST,
+              getReasonPhrase(StatusCodes.BAD_REQUEST),
             ),
           ],
         });
+      return;
     }
+
+    const width = this.useFilters.width as string | undefined;
+    let qrWidth: number | undefined;
+    const widthNum = Number(width);
+    if (widthNum && widthNum > 0 && widthNum < 1000) {
+      qrWidth = widthNum;
+    }
+
+    // Unknown addresses fall through to a plain `grc:ADDRESS` QR with
+    // 200 OK — a 404 here would let a caller probe whether a known
+    // on-chain address was ever minted by this grcpay instance.
+    let wallet: Wallet | null = null;
+    try {
+      wallet = await this.walletFinderService.findWalletByAddress(address);
+    } catch {
+      wallet = null;
+    }
+
+    let qrCodeString: string;
+    let response: Wallet;
+    if (wallet) {
+      qrCodeString = await this.qrService.generateQrCode(wallet, qrWidth);
+      wallet.qr = qrCodeString;
+      response = wallet;
+    } else {
+      qrCodeString = await this.qrService.generatePlainAddressQrCode(address, qrWidth);
+      const synthetic = new Wallet();
+      synthetic.address = address;
+      synthetic.qr = qrCodeString;
+      response = synthetic;
+    }
+
+    this.res
+      .status(StatusCodes.OK)
+      .send(this.render<Wallet>(response));
   }
 }

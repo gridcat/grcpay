@@ -57,7 +57,6 @@ function SecondaryText({ value, link }: Omit<Props, 'title'>) {
       <NextMuiLink
         href={link}
         target="_blank"
-        rel="nofollow"
       >
         {value}
       </NextMuiLink>

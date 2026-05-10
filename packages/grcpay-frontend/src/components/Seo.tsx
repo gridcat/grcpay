@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import { IS_TESTNET } from '@/lib/network';
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://grcpay.gridcoin.club';
 export const SITE_NAME = 'Gridcoin Pay';
@@ -32,11 +33,15 @@ export function Seo({
   const canonicalUrl = `${SITE_URL}${path}`;
   const ogImageUrl = ogImagePath
     ? `${SITE_URL}${ogImagePath}`
-    : `${SITE_URL}/og-image.png`;
+    : `${SITE_URL}/og-image`;
+
+  // Family-wide convention: every testnet build prepends `[testnet] ` to the
+  // page title so the network is obvious in tab/favicon views.
+  const displayTitle = IS_TESTNET ? `[testnet] ${title}` : title;
 
   return (
     <Head>
-      <title>{title}</title>
+      <title>{displayTitle}</title>
       <meta key="description" name="description" content={description} />
       <link key="canonical" rel="canonical" href={canonicalUrl} />
 
@@ -60,7 +65,7 @@ export function Seo({
         href={iconDataUrl ?? '/favicon.ico'}
       />
 
-      <meta key="og:title" property="og:title" content={title} />
+      <meta key="og:title" property="og:title" content={displayTitle} />
       <meta key="og:description" property="og:description" content={description} />
       <meta key="og:type" property="og:type" content={ogType} />
       <meta key="og:url" property="og:url" content={canonicalUrl} />
@@ -69,7 +74,7 @@ export function Seo({
       <meta key="og:locale" property="og:locale" content="en_US" />
 
       <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
-      <meta key="twitter:title" name="twitter:title" content={title} />
+      <meta key="twitter:title" name="twitter:title" content={displayTitle} />
       <meta key="twitter:description" name="twitter:description" content={description} />
       <meta key="twitter:image" name="twitter:image" content={ogImageUrl} />
 

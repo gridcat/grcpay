@@ -149,30 +149,38 @@ The `rate` value is the price of 1 GRC in the requested currency. To convert a f
 
 ## Database
 
-SQLite via Prisma. The database is a single file (path set by `DATABASE_URL`, e.g. `file:../data/payment.db` — note the path is resolved relative to `prisma/schema.prisma`, so `../data` lands in the package root's `data/` directory). Two tables:
+SQLite via [Kysely](https://kysely.dev) + [better-sqlite3](https://github.com/WiseLibs/better-sqlite3). The database is a single file (`DATABASE_URL`, e.g. `./data/payment.db`; the legacy `file:./data/payment.db` form still works for backwards compat). Migrations run automatically when the service starts — there is no separate migration step. Three tables:
 
 **`wallets`** -- the core table
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | BigInt (PK) | Auto-increment |
-| `address` | VARCHAR(36) | Generated Gridcoin payment address |
-| `recipient` | VARCHAR(36), nullable | Where to forward funds |
-| `amount_required` | BigInt unsigned | Required amount in Halford (1 GRC = 100,000,000 Halford) |
-| `amount_recieved` | BigInt unsigned | Amount received so far in Halford |
-| `status` | String | `new`, `funded`, `error`, `expired`, `processed`, `refunded`, `norefund` |
-| `tx_out` | VARCHAR(64), nullable | Transaction ID when funds are forwarded/refunded |
-| `created_at` | DateTime | Auto-set on creation |
-| `updated_at` | DateTime | Auto-updated |
+| `id` | INTEGER (PK) | Auto-increment |
+| `address` | TEXT | Generated Gridcoin payment address |
+| `recipient` | TEXT, nullable | Where to forward funds |
+| `amount_required` | INTEGER (bigint) | Required amount in Halford (1 GRC = 100,000,000 Halford) |
+| `amount_recieved` | INTEGER (bigint) | Confirmed amount received in Halford |
+| `amount_pending` | INTEGER (bigint) | Mempool/0-conf amount in Halford |
+| `status` | TEXT | `new`, `confirming`, `funded`, `error`, `expired`, `processed`, `refunded`, `norefund` |
+| `tx_out` | TEXT, nullable | Transaction ID when funds are forwarded |
+| `refund_tx` | TEXT, nullable | Transaction ID when an overpayment refund went out |
+| `refund_amount` | INTEGER (bigint), nullable | Total halford actually refunded |
+| `mode` | TEXT | Wallet lifecycle mode (currently always `checkout`) |
+| `lifespan_seconds` | INTEGER, nullable | Per-wallet lifespan override; null = use `LIFE_SPAN` env default |
+| `token_hash` | TEXT | SHA256 of the per-wallet access token |
+| `refund_attempts` | INTEGER | Cross-cycle retry counter |
+| `created_at` | TEXT (ISO-8601) | Set by the app on insert |
+| `updated_at` | TEXT (ISO-8601) | Set by the app on every write |
 
 **`db_logs`** -- audit log, one row per state change
 | Column | Type | Description |
 |--------|------|-------------|
-| `wallet_id` | BigInt | References wallets.id |
-| `action` | VARCHAR(64) | What changed (`status`, `amount_recieved`, `tx_out`, etc.) |
-| `old_status` | VARCHAR(64) | Previous value |
-| `new_status` | VARCHAR(64) | New value |
+| `wallet_id` | INTEGER | References wallets.id |
+| `action` | TEXT | What changed (`status`, `amount_recieved`, `tx_out`, etc.) |
+| `old_status` | TEXT | Previous value |
+| `new_status` | TEXT | New value |
+| `created_at` | TEXT (ISO-8601) | Set by the app on insert |
 
-Run migrations with `npx prisma migrate dev`.
+**`incoming_txs`** -- per-wallet receive txid index, populated by the indexer; lets the late-payment refund path resolve senders without re-walking the daemon-wide listTransactions window. Unique on `(wallet_id, txid)`.
 
 ## Project structure
 
@@ -208,23 +216,27 @@ src/
   routes/                        Express route definitions
   lib/
     gridcoin.ts                  RPC client initialization + connection retry
-    prisma.ts                    Prisma client singleton
+    db.ts                        Kysely + better-sqlite3 instance, BigInt JSON shim, now()
+    database.ts                  Hand-written Database interface (table types)
+    migrate.ts                   Boot-time migration runner (Kysely Migrator)
     log.ts                       Winston logger
     event.ts                     EventEmitter for audit log events
     nomination.ts                GRC <-> Halford conversion (Decimal.js for precision)
-prisma/
-  schema.prisma                  Database schema
+  migrations/
+    20260507000000_initial.ts    Schema (wallets, db_logs, incoming_txs)
 config.json                      Default config (non-secret values only)
 Dockerfile                       Container image (node:22-alpine)
 ```
 
 ## Architecture patterns
 
-- **Layering:** Route -> Controller -> Service -> Model (Prisma)
-- **Amounts:** Stored as BigInt in Halford units (1 GRC = 100,000,000 Halford) to avoid floating-point errors. Converted with `Decimal.js` at boundaries.
+- **Layering:** Route -> Controller -> Service -> Kysely. No repository layer — services run Kysely queries directly against the shared `db` instance.
+- **Amounts:** Stored as 64-bit `INTEGER` in Halford units (1 GRC = 100,000,000 Halford). better-sqlite3's `defaultSafeIntegers(true)` returns them as native `bigint`, avoiding the float drift you'd get going through `Number`. `Decimal.js` is used at the GRC ↔ Halford boundary.
 - **Audit logging:** Services emit events via `EventEmitter`. `DbLogService` listens and persists to `db_logs`. Decoupled from business logic.
-- **Singleton services:** Each service class is instantiated once at module level and exported (e.g., `export const WalletsService = new WalletsServiceClass()`). Constructor injection allows overriding the RPC client and Wallet model for testing.
-- **Wallet status:** Defined as a TypeScript enum in `src/models/Wallet.ts` and stored as plain strings in SQLite. Prisma has no native enum support for SQLite, so validation happens at the application layer.
+- **Singleton services:** Each service class is instantiated once at module level and exported (e.g., `export const WalletsService = new WalletsServiceClass()`). Constructor injection is used only to override the RPC client in tests; DB access goes through the module-level `db` import.
+- **Wallet status:** Defined as a TypeScript enum in `src/models/Wallet.ts` and stored as plain TEXT in SQLite. Validation happens at the application layer (Joi schemas).
+- **Datetime columns** are TEXT ISO-8601 strings, always written by the app via `now()` so the format stays uniform and lexicographic comparisons in SQL stay correct.
+- **Migrations:** plain TypeScript files under `src/migrations/`, applied automatically on service start by `lib/migrate.ts` (Kysely's `Migrator` + `FileMigrationProvider`). No separate migrate command, no extra deploy step.
 - **JSON:API:** All API responses use yayson presenters. The `BaseController` parses standard JSON:API query params (pagination, sorting, filtering, sparse fieldsets).
 
 ## Configuration
@@ -233,7 +245,7 @@ Loaded via `nconf` with priority: CLI args > environment variables > `config.jso
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | yes | -- | SQLite file path for Prisma (e.g. `file:../data/payment.db` — resolved relative to `prisma/schema.prisma`) |
+| `DATABASE_URL` | yes | -- | SQLite file path (e.g. `./data/payment.db`) or `:memory:` for tests. The legacy `file:` prefix is accepted for backwards compatibility. |
 | `GRC_RPC_USER` | yes | -- | Gridcoin wallet RPC username |
 | `GRC_RPC_PASSWORD` | yes | -- | Gridcoin wallet RPC password |
 | `GRC_RPC_HOST` | yes | `wallet` | Gridcoin wallet RPC host |
@@ -252,19 +264,14 @@ Loaded via `nconf` with priority: CLI args > environment variables > `config.jso
 # Install dependencies
 npm install
 
-# Generate Prisma client
-npx prisma generate
-
-# Run database migrations
-npx prisma migrate dev
-
-# Start in dev mode (auto-rebuild + nodemon)
+# Start in dev mode (auto-rebuild + nodemon).
+# Migrations run automatically on first boot — no separate step.
 npm run dev
 
 # Build
 npm run build
 
-# Start production
+# Start production (also runs migrations on boot)
 npm start
 
 # Type check

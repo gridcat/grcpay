@@ -72,8 +72,7 @@ export function Wallets() {
           creation time and reveals
           {' '}
           <i>only once</i>
-          {' '}
-          — this is the only response that will ever contain it. The
+          . This is the only response that will ever contain it. The
           server stores a SHA256 hash, not the raw token, so if you
           lose it there&apos;s no way to recover. You&apos;ll pass it
           back in the
@@ -97,7 +96,7 @@ export function Wallets() {
           Note the amounts are serialised as
           {' '}
           <b>halford strings</b>
-          , not GRC floats — 1 GRC = 100,000,000 halford. Use string
+          , not GRC floats: 1 GRC = 100,000,000 halford. Use string
           arithmetic (or a BigInt in your language of choice) to avoid
           rounding surprises. Convert to GRC only at the display layer.
         </Typography>
@@ -111,7 +110,7 @@ export function Wallets() {
           {' '}
           <code>processed</code>
           {' '}
-          when fully funded — useful when you sweep balances yourself.
+          when fully funded. Useful when you sweep balances yourself.
           Overpayment refunds still happen in that case; only the
           forward-to-recipient step is skipped.
         </Typography>
@@ -123,7 +122,7 @@ export function Wallets() {
           <code>X-Wallet-Token</code>
           {' '}
           header you get a 401 regardless of whether the address
-          exists — GRCpay deliberately doesn&apos;t leak which
+          exists. GRCpay deliberately doesn&apos;t leak which
           addresses are live to unauthenticated callers. Only the
           merchant who minted the wallet should be able to observe
           amounts and settlement txids.
@@ -164,7 +163,7 @@ export function Wallets() {
           {' '}
           <code>token</code>
           {' '}
-          on the GET response — it was a one-time reveal on creation
+          on the GET response. It was a one-time reveal on creation
           and is never echoed back. The auth layer deliberately returns
           an identical
           {' '}
@@ -195,7 +194,7 @@ export function Wallets() {
           {' '}
           <code>X-Wallet-Token</code>
           {' '}
-          header as GET — no token means 401, wrong token means 401.
+          header as GET. No token means 401, wrong token means 401.
           Cancelling anything past
           {' '}
           <code>new</code>
@@ -205,7 +204,7 @@ export function Wallets() {
           <code>409 Conflict</code>
           {' '}
           (the customer already paid, the merchant already got the
-          money, or the wallet already expired — in all those cases
+          money, or the wallet already expired; in all those cases
           cancellation is a no-op).
         </Typography>
         <CodeBlock
@@ -225,7 +224,7 @@ export function Wallets() {
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           GRCpay does not settle on 0-conf. The balance updater asks the
-          wallet daemon for two balances on every tick — one at the
+          wallet daemon for two balances on every tick: one at the
           configured
           {' '}
           <code>MIN_CONFIRMATIONS</code>
@@ -233,8 +232,7 @@ export function Wallets() {
           threshold (default
           {' '}
           <b>2</b>
-          ) and one at 0-conf — and the difference is tracked as a
-          separate
+          ) and one at 0-conf. The difference is tracked as a separate
           {' '}
           <code>amountPending</code>
           {' '}
@@ -246,8 +244,7 @@ export function Wallets() {
           wallet to
           {' '}
           <code>funded</code>
-          {' '}
-          — and therefore can&apos;t trick you into shipping goods for
+          , and therefore can&apos;t trick you into shipping goods for
           a payment that later disappears.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
@@ -289,11 +286,11 @@ export function Wallets() {
 }`}
         />
         <Typography gutterBottom variant="body1" component="p">
-          When the customer sends enough — confirmed
+          When the customer sends enough (confirmed
           {' '}
           <b>plus</b>
           {' '}
-          still-unconfirmed — to cover
+          still-unconfirmed) to cover
           {' '}
           <code>amountRequired</code>
           , the wallet transitions to
@@ -303,8 +300,8 @@ export function Wallets() {
           {' '}
           <i>not</i>
           {' '}
-          fire yet — the merchant only gets paid once the confirmed
-          portion alone meets the invoice — but this is the right
+          fire yet. The merchant only gets paid once the confirmed
+          portion alone meets the invoice. But this is the right
           moment for your checkout UI to stop asking for more money and
           switch to a reassuring &quot;payment detected, waiting for
           confirmations&quot; banner. Without this state, customers
@@ -337,8 +334,9 @@ export function Wallets() {
           <li>
             <Typography variant="body1">
               <code>amountPending</code>
+              :
               {' '}
-              — Halford sum of inbound txs the daemon has seen at 0-conf
+              halford sum of inbound txs the daemon has seen at 0-conf
               that haven&apos;t yet reached
               {' '}
               <code>MIN_CONFIRMATIONS</code>
@@ -356,8 +354,9 @@ export function Wallets() {
           <li>
             <Typography variant="body1">
               <code>txOut</code>
+              :
               {' '}
-              — Gridcoin transaction id for the merchant forward
+              Gridcoin transaction id for the merchant forward
               (wallets with a recipient) or the first per-sender refund
               tx (expired wallets without a recipient, or wallets that
               went through the expired-refund flow). Null until
@@ -367,8 +366,9 @@ export function Wallets() {
           <li>
             <Typography variant="body1">
               <code>refundTx</code>
+              :
               {' '}
-              — Gridcoin transaction id for the overpayment refund sent
+              Gridcoin transaction id for the overpayment refund sent
               back to the customer. Null when no overpayment refund
               happened: either the payment was exact, or the
               overpayment was too small to be worth refunding, or the
@@ -383,8 +383,9 @@ export function Wallets() {
           <li>
             <Typography variant="body1">
               <code>refundAmount</code>
+              :
               {' '}
-              — The actual halford amount returned to the customer
+              the actual halford amount returned to the customer
               (excludes the refund&apos;s own network fee, which the
               customer paid). Derived from
               {' '}

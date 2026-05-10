@@ -12,7 +12,7 @@ export function Conventions() {
         <Typography gutterBottom variant="body1" component="p">
           Every request and response uses the
           {' '}
-          <NextMuiLink href="https://jsonapi.org/" rel="nofollow" color="primary">JSON:API</NextMuiLink>
+          <NextMuiLink href="https://jsonapi.org/" color="primary">JSON:API</NextMuiLink>
           {' '}
           envelope. POST bodies must be sent with the content type
           {' '}
@@ -42,7 +42,7 @@ export function Conventions() {
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           <b>Per-wallet access tokens</b>
-          : most endpoints are public — you don&apos;t need an API key
+          : most endpoints are public. You don&apos;t need an API key
           to hit
           {' '}
           <code>/status</code>
@@ -53,15 +53,13 @@ export function Conventions() {
           {' '}
           <code>POST /wallets</code>
           , or the QR image endpoint. But the two endpoints that read
-          or modify an existing wallet —
-          {' '}
+          or modify an existing wallet (
           <code>GET /wallets/:address</code>
           {' '}
           and
           {' '}
           <code>DELETE /wallets/:address</code>
-          {' '}
-          — require a per-wallet token in the
+          ) require a per-wallet token in the
           {' '}
           <code>X-Wallet-Token</code>
           {' '}

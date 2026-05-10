@@ -63,7 +63,7 @@ const rows: Row[] = [
     forwarded: '(not yet)',
     refundTxField: 'null',
     notes:
-      'Refund RPC threw. Wallet stays funded, refund_attempts bumped, retried on the next cycle with exponential backoff (30s, 1m, 2m, 4m). Merchant payout is held until the refund either succeeds or the retry cap is exhausted — rationale: don\'t commit to forwarding the merchant\'s cut before we\'ve given the customer\'s refund a real chance.',
+      'Refund RPC threw. Wallet stays funded, refund_attempts bumped, retried on the next cycle with exponential backoff (30s, 1m, 2m, 4m). Merchant payout is held until the refund either succeeds or the retry cap is exhausted. Rationale: don\'t commit to forwarding the merchant\'s cut before we\'ve given the customer\'s refund a real chance.',
   },
   {
     scenario: 'Refund tx fails (retries exhausted)',
@@ -97,7 +97,7 @@ export function FeeMath() {
           <b>GRCpay always pays the per-tx network fee out of the
           amount being sent</b>
           , never on top of it. That applies equally to merchant
-          forwards and to customer refunds — whoever&apos;s receiving
+          forwards and to customer refunds. Whoever&apos;s receiving
           the tx also bears the fee for it.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
@@ -169,7 +169,7 @@ export function FeeMath() {
           into-tip cases (dust, sender unknown, refund tx fails) give
           the merchant slightly
           <i> more </i>
-          than the required amount — never less. The only scenario
+          than the required amount, never less. The only scenario
           where the merchant gets
           <i> less </i>
           than
@@ -229,7 +229,7 @@ export function FeeMath() {
           {' '}
           <code>error</code>
           {' '}
-          regardless of how many others succeeded — operator should
+          regardless of how many others succeeded. The operator should
           check
           {' '}
           <code>db_logs</code>
@@ -250,7 +250,7 @@ export function FeeMath() {
           , or
           {' '}
           <code>norefund</code>
-          ) can still have GRC arrive late — a customer paying from a
+          ) can still have GRC arrive late: a customer paying from a
           stale checkout tab, a shopper who saved the address and came
           back an hour later, a merchant pulling the plug on an order
           that was already in flight. GRCpay runs a separate slow
@@ -293,8 +293,8 @@ export function FeeMath() {
           {' '}
           <code>new</code>
           {' '}
-          — item sold out, customer abandoned checkout, merchant just
-          changed their mind — the integration can call
+          (item sold out, customer abandoned checkout, merchant just
+          changed their mind), the integration can call
           {' '}
           <code>DELETE /wallets/:address</code>
           {' '}
@@ -311,8 +311,7 @@ export function FeeMath() {
           on anything past
           {' '}
           <code>new</code>
-          {' '}
-          — once funds are in, they&apos;re either already on their
+          . Once funds are in, they&apos;re either already on their
           way to the merchant or already being refunded.
         </Typography>
       </Box>

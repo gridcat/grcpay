@@ -12,14 +12,14 @@ export function WhyGrcpay() {
         <Typography gutterBottom variant="body1" component="p">
           Bitcoin has
           {' '}
-          <NextMuiLink href="https://btcpayserver.org/" rel="nofollow" color="primary">BTCPay Server</NextMuiLink>
+          <NextMuiLink href="https://btcpayserver.org/" color="primary">BTCPay Server</NextMuiLink>
           {' '}
           — a self-hosted, non-custodial payment processor you can drop in
           front of any checkout. Gridcoin doesn&apos;t. Gridcoin isn&apos;t
           on BTCPay&apos;s altcoin support list, and it doesn&apos;t appear
           on the
           {' '}
-          <NextMuiLink href="https://github.com/alexk111/awesome-bitcoin-payment-processors" rel="nofollow" color="primary">awesome-bitcoin-payment-processors</NextMuiLink>
+          <NextMuiLink href="https://github.com/alexk111/awesome-bitcoin-payment-processors" color="primary">awesome-bitcoin-payment-processors</NextMuiLink>
           {' '}
           curated list either. The stock wallet daemon (
           <code>gridcoinresearchd</code>
@@ -183,11 +183,10 @@ export function WhyGrcpay() {
           something a checkout can talk to.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
-          Crucially, it doesn&apos;t bypass any wallet limitations —
-          there&apos;s no magic. It just packages all the plumbing every
-          merchant would otherwise have to write themselves into one
-          open-source service that anyone can run against their own
-          wallet.
+          It doesn&apos;t bypass any wallet limitations. There&apos;s no
+          magic. It just packages all the plumbing every merchant would
+          otherwise have to write themselves into one open-source service
+          that anyone can run against their own wallet.
         </Typography>
 
         <Typography variant="h5" component="h3" sx={{ pt: 3, pb: 1 }}>
@@ -261,7 +260,6 @@ export function WhyGrcpay() {
               {' '}
               <NextMuiLink
                 href="https://github.com/gridcoin-community/Gridcoin-Research/blob/master/src/wallet/wallet.h"
-                rel="nofollow"
                 color="primary"
               >
                 src/wallet/wallet.h
@@ -300,7 +298,6 @@ export function WhyGrcpay() {
               {' '}
               <NextMuiLink
                 href="https://gridcoin.us/wiki/rpc.html"
-                rel="nofollow"
                 color="primary"
               >
                 Gridcoin RPC commands wiki

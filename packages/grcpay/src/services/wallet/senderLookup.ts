@@ -1,6 +1,7 @@
 import { GridcoinRPC } from 'gridcoin-rpc';
 import { log } from '../../lib/log';
 import { config } from '../../config';
+import { db } from '../../lib/db';
 
 export interface SenderShare {
   /** The sender's address, decoded from the vin of one of the incoming txs. */
@@ -9,6 +10,56 @@ export interface SenderShare {
   amountHalford: bigint;
   /** The transaction time of the most recent incoming tx from this sender (for ordering). */
   latestTime: number;
+}
+
+interface IncomingTx {
+  txid: string;
+  time: number;
+  amountHalford: bigint;
+}
+
+async function loadIncoming(
+  rpc: GridcoinRPC,
+  walletAddress: string,
+): Promise<IncomingTx[]> {
+  // Indexed-table path. Wrapped in its own try/catch so any DB issue
+  // (missing table in test envs, transient connection hiccup in prod)
+  // falls through to the legacy listTransactions scan rather than
+  // wedging the refund flow entirely.
+  try {
+    const recorded = await db
+      .selectFrom('incoming_txs')
+      .innerJoin('wallets', 'wallets.id', 'incoming_txs.wallet_id')
+      .where('wallets.address', '=', walletAddress)
+      .select(['incoming_txs.txid', 'incoming_txs.time', 'incoming_txs.amount_halford'])
+      .execute();
+    if (recorded.length) {
+      return recorded.map((r) => ({
+        txid: r.txid,
+        time: Number(r.time),
+        amountHalford: r.amount_halford,
+      }));
+    }
+  } catch (e) {
+    log.warn(
+      `Sender lookup: indexed-tx read failed for ${walletAddress}, falling back to listTransactions: ${e}`,
+    );
+  }
+
+  // Pre-indexer wallet (or non-grcpay address, or DB error above):
+  // fall back to the original daemon-side scan. 100-item window is the
+  // same limitation as before — nothing gets worse for these records.
+  const transactions = await rpc.listTransactions('*', 100, 0);
+  return transactions
+    .filter((tx) => tx.category === 'receive' && tx.address === walletAddress)
+    .map((tx) => ({
+      txid: tx.txid,
+      time: tx.time,
+      // listTransactions reports `amount` in GRC (positive for
+      // receives). Round to the nearest halford since GRC amounts come
+      // back as JS floats, same convention as the indexer.
+      amountHalford: BigInt(Math.round(tx.amount * config.HALFORD)),
+    }));
 }
 
 /**
@@ -28,16 +79,24 @@ export interface SenderShare {
  *
  * Results are sorted by `latestTime` ASCENDING, so callers that want
  * the most recent sender take `result[result.length - 1]`.
+ *
+ * Source of incoming txs, in order of preference:
+ *   1. `incoming_txs` table — populated by the indexer on every
+ *      job-loop tick. Doesn't depend on the daemon's listTransactions
+ *      window, so it works even for wallets being refunded days after
+ *      hundreds of newer txs have rotated past the recent-100 horizon.
+ *   2. Legacy listTransactions scan — fallback for wallets that
+ *      existed before the indexer (nothing in `incoming_txs` yet) or
+ *      for raw addresses passed in by tests/scripts that aren't
+ *      grcpay-managed. Same 100-item window as before; same silent
+ *      miss on old records. No worse than pre-indexer behaviour.
  */
 export async function findAllSenders(
   rpc: GridcoinRPC,
   walletAddress: string,
 ): Promise<SenderShare[]> {
   try {
-    const transactions = await rpc.listTransactions('*', 100, 0);
-    const incoming = transactions.filter(
-      (tx) => tx.category === 'receive' && tx.address === walletAddress,
-    );
+    const incoming = await loadIncoming(rpc, walletAddress);
     if (!incoming.length) {
       return [];
     }
@@ -67,20 +126,16 @@ export async function findAllSenders(
         }
         if (!senderAddr) continue;
 
-        // listTransactions reports `amount` in GRC (positive for receives).
-        // Convert to halford for precise arithmetic; round to the nearest
-        // halford since GRC amounts come back as JS floats.
-        const halford = BigInt(Math.round(tx.amount * config.HALFORD));
         const existing = byAddress.get(senderAddr);
         if (existing) {
-          existing.amountHalford = existing.amountHalford + halford;
+          existing.amountHalford += tx.amountHalford;
           if (tx.time > existing.latestTime) {
             existing.latestTime = tx.time;
           }
         } else {
           byAddress.set(senderAddr, {
             address: senderAddr,
-            amountHalford: halford,
+            amountHalford: tx.amountHalford,
             latestTime: tx.time,
           });
         }

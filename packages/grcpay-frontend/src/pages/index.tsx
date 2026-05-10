@@ -14,10 +14,13 @@ import Link from 'next/link';
 import { Header } from '@/components/Header/Header';
 import { Footer } from '@/components/Footer/Footer';
 import { GradientLine } from '@/components/GradientLine';
-import { Seo, SITE_NAME } from '@/components/Seo';
+import { Seo, SITE_NAME, SITE_URL } from '@/components/Seo';
 import { PageWrapper } from '@/components/PageWrapper';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
 import { withThemeDataServerSide } from '@/lib/modeDataServer';
+import {
+  AUTHOR_GRIDCAT, faqPage, ORG_ID, PUBLISHER_ORG, type FaqEntry,
+} from '@/lib/structuredData';
 
 export const getServerSideProps = withThemeDataServerSide(
   async (_context: GetServerSidePropsContext) => ({
@@ -25,22 +28,49 @@ export const getServerSideProps = withThemeDataServerSide(
   }),
 );
 
+const faqs: FaqEntry[] = [
+  {
+    question: 'What is GRCpay?',
+    answer: 'GRCpay is a self-hosted, non-custodial Gridcoin payment processor for merchants. It mints a fresh Gridcoin address for every order, watches the blockchain for incoming funds, and forwards the payment directly to the merchant’s wallet. There is no custodian and no middleman.',
+  },
+  {
+    question: 'How do I accept Gridcoin payments on my site?',
+    answer: 'Run GRCpay alongside a Gridcoin wallet daemon and call POST /wallets from your checkout with the amount you expect. GRCpay returns a fresh address and QR code; the customer pays it directly. When the funds arrive on chain, GRCpay forwards them to your merchant wallet and the order is marked processed.',
+  },
+  {
+    question: 'Is GRCpay custodial?',
+    answer: 'No. Funds flow directly from buyer to merchant on the Gridcoin blockchain. GRCpay only orchestrates address minting, lifecycle tracking, and forwarding — it never holds customer funds in a pooled account.',
+  },
+  {
+    question: 'Does GRCpay support WooCommerce?',
+    answer: 'A WooCommerce plugin is in beta testing. It adds a Gridcoin payment method to any WordPress store — customers see a QR code at checkout, merchants receive funds directly at their own wallet. Public release coming soon.',
+  },
+  {
+    question: 'Can I self-host GRCpay?',
+    answer: 'Self-hosting is the canonical setup, not a fallback. The repository ships with a Docker Compose stack that runs GRCpay alongside a Gridcoin wallet, and the docs cover both connecting to an existing wallet and standing the whole stack up from scratch.',
+  },
+  {
+    question: 'What happens if a customer underpays or pays after the order expires?',
+    answer: 'If a wallet expires with funds still on it, GRCpay walks the transaction history with listtransactions / getrawtransaction and refunds the sender automatically. If it cannot determine a sender, the wallet is moved to an error status for manual review.',
+  },
+];
+
 const features: { title: string; body: string; href: string; cta: string }[] = [
   {
     title: 'How it works',
-    body: 'Read the protocol, lifecycle, and refund flow that GRCpay uses to settle Gridcoin payments end-to-end.',
+    body: 'The protocol, the wallet lifecycle, and how refunds work when an order expires unpaid.',
     href: '/about',
     cta: 'Learn more →',
   },
   {
     title: 'API',
-    body: 'A small REST API. Mint wallets, look them up, fetch QR codes — all returned as JSON:API documents.',
+    body: 'A small REST API: mint wallets, look them up, fetch QR codes. Responses are JSON:API documents.',
     href: '/developers',
     cta: 'Read the API docs →',
   },
   {
     title: 'Ecommerce plugins',
-    body: 'Drop-in integrations for WooCommerce (live), Shopify, Magento and PrestaShop are on the roadmap.',
+    body: 'WooCommerce plugin is in beta testing. Shopify, Magento and PrestaShop are on the roadmap.',
     href: '/integrations',
     cta: 'See plugins →',
   },
@@ -50,9 +80,38 @@ export default function Home() {
   return (
     <>
       <Seo
-        title={`${SITE_NAME} — accept Gridcoin in your checkout`}
-        description="GRCpay is a self-hosted Gridcoin payment facilitator. It mints one-shot wallets, monitors the chain, and forwards funds to merchants — no custodial risk, no middleman."
+        title={`${SITE_NAME} — Gridcoin payment processor for merchants`}
+        description="Accept Gridcoin payments in any checkout. GRCpay is a self-hosted, non-custodial Gridcoin payment processor for merchants — mints a fresh wallet per order, watches the chain, and forwards funds directly to your wallet."
         path="/"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'WebSite',
+              '@id': `${SITE_URL}/#website`,
+              name: SITE_NAME,
+              alternateName: 'GRCpay',
+              url: SITE_URL,
+              description: 'Self-hosted, non-custodial Gridcoin payment processor for merchants.',
+              inLanguage: 'en',
+              publisher: { '@id': ORG_ID },
+            },
+            PUBLISHER_ORG,
+            {
+              '@type': 'SoftwareApplication',
+              name: SITE_NAME,
+              applicationCategory: 'FinanceApplication',
+              applicationSubCategory: 'PaymentGateway',
+              operatingSystem: 'Linux, macOS, Windows (Docker)',
+              url: SITE_URL,
+              description: 'Self-hosted, non-custodial Gridcoin payment processor for merchants. Accepts Gridcoin (GRC) payments at checkout — mints a fresh address per order, watches the blockchain, forwards funds to the merchant.',
+              offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+              author: AUTHOR_GRIDCAT,
+              publisher: { '@id': ORG_ID },
+            },
+            faqPage(faqs),
+          ],
+        }}
       />
       <PageWrapper>
         <Header />
@@ -71,7 +130,7 @@ export default function Home() {
               component="p"
               sx={{ color: 'text.secondary', pb: 4, maxWidth: 720, mx: 'auto' }}
             >
-              {`${SITE_NAME} mints a fresh Gridcoin address for every order, watches the blockchain for incoming funds, and forwards the payment straight to your wallet. Self-hosted, privacy-first, open source.`}
+              {`${SITE_NAME} mints a fresh Gridcoin address for every order, watches the blockchain for incoming funds, and forwards the payment to your wallet. Self-hosted, open source, non-custodial.`}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
               <Button
@@ -116,6 +175,22 @@ export default function Home() {
               </Grid>
             ))}
           </Grid>
+
+          <Box component="section" sx={{ py: { xs: 4, md: 6 }, maxWidth: 820, mx: 'auto' }}>
+            <Typography component="h2" variant="h4" sx={{ fontWeight: 700, pb: 3 }}>
+              Frequently asked questions
+            </Typography>
+            {faqs.map((f) => (
+              <Box key={f.question} sx={{ pb: 3 }}>
+                <Typography component="h3" variant="h6" sx={{ fontWeight: 600, pb: 1 }}>
+                  {f.question}
+                </Typography>
+                <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+                  {f.answer}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
         </Container>
         <Footer />
       </PageWrapper>

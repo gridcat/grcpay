@@ -1,13 +1,15 @@
 import { config } from './config';
 import { connect } from './lib/gridcoin';
 import { log } from './lib/log';
+import { migrateToLatest } from './lib/migrate';
 import { WalletsService } from './services/wallet/walletsService';
 import { WalletsBalanceUpdaterService } from './services/wallet/walletsBalanceUpdater';
 import { DbLogService } from './services/dbLog/dbLogService';
-import './api';
+import { startServer } from './api';
 import { WalletExpiredProcessorService } from './services/wallet/walletExpiredProcessorService';
 import { WalletFundedProcessorService } from './services/wallet/walletFundedProcessorService';
 import { WalletLatePaymentProcessorService } from './services/wallet/walletLatePaymentProcessorService';
+import { IncomingTxIndexerService } from './services/wallet/incomingTxIndexer';
 
 async function initConnections(): Promise<void> {
   while (!await connect()) {
@@ -41,12 +43,25 @@ function schedule(name: string, intervalSec: number, body: () => Promise<unknown
 }
 
 async function main(): Promise<void> {
+  // Apply pending migrations before anything else touches the DB. The
+  // SQLite file lives in a mounted volume, so it may be empty on first
+  // boot; this is what makes `docker run` enough to spin up grcpay
+  // without a separate migration step.
+  await migrateToLatest();
+
   await initConnections();
+
+  startServer();
 
   DbLogService.registerEventListener();
 
   schedule('Job loop', config.JOBS_INTERVAL, () => (
-    WalletsBalanceUpdaterService.updateBalances()
+    // Record incoming receive txids BEFORE the balance/funded/expired
+    // steps run so any refund flow they trigger downstream can resolve
+    // senders from the indexed set instead of re-scanning the
+    // daemon-wide listTransactions window.
+    IncomingTxIndexerService.indexIncomingTxs()
+      .then(() => WalletsBalanceUpdaterService.updateBalances())
       .then(() => WalletsService.findFundedWallets())
       .then(() => WalletsService.expireWallets())
       .then(() => WalletFundedProcessorService.processFunded())

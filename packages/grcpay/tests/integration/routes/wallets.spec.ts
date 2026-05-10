@@ -1,27 +1,9 @@
 import supertest from 'supertest';
-import { createSampleWalletRow } from '../../helpers/mocks';
 import { hashToken } from '../../../src/lib/walletToken';
+import { WalletStatus } from '../../../src/models/Wallet';
 
 const VALID_TOKEN = 'integration-test-token-raw-value';
 const VALID_TOKEN_HASH = hashToken(VALID_TOKEN);
-
-const mockPrismaWallets = {
-  findMany: jest.fn().mockResolvedValue([]),
-  findFirst: jest.fn().mockResolvedValue(null),
-  create: jest.fn(),
-  update: jest.fn(),
-  updateMany: jest.fn(),
-};
-
-jest.mock('../../../src/lib/prisma', () => ({
-  getPrisma: () => ({
-    wallets: mockPrismaWallets,
-    db_logs: {
-      create: jest.fn().mockResolvedValue({}),
-    },
-  }),
-  disconnect: jest.fn(),
-}));
 
 const mockRpc = {
   getWalletInfo: jest.fn(),
@@ -30,6 +12,7 @@ const mockRpc = {
   getReceivedByAddress: jest.fn().mockResolvedValue(0),
   setTXfee: jest.fn(),
   sendToAddress: jest.fn(),
+  validateAddress: jest.fn().mockResolvedValue({ isvalid: true }),
 };
 
 jest.mock('../../../src/lib/gridcoin', () => ({
@@ -37,53 +20,52 @@ jest.mock('../../../src/lib/gridcoin', () => ({
   connect: jest.fn().mockResolvedValue(true),
 }));
 
+// eslint-disable-next-line import/first
 import { app } from '../../../src/api';
+// eslint-disable-next-line import/first
+import { db } from '../../../src/lib/db';
+// eslint-disable-next-line import/first
+import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
 const request = supertest(app);
 
 describe('POST /wallets', () => {
-  beforeEach(() => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await truncateAll();
     mockRpc.getNewAddress.mockResolvedValue('Snew_address_567890abcdefghijklm12');
+    mockRpc.validateAddress.mockResolvedValue({ isvalid: true });
   });
 
   it('creates a wallet and returns 201 with a one-time access token', async () => {
-    const row = createSampleWalletRow({
-      address: 'Snew_address_567890abcdefghijklm12',
-      amount_required: BigInt(1000000000),
-    });
-    mockPrismaWallets.create.mockResolvedValue(row);
-
     const res = await request
       .post('/wallets')
       .set('Content-Type', 'application/vnd.api+json')
       .send({
         data: {
           type: 'wallets',
-          attributes: {
-            amountRequired: 10,
-          },
+          attributes: { amountRequired: 10 },
         },
       });
 
     expect(res.status).toBe(201);
     expect(res.body.data).toHaveProperty('type', 'wallets');
     expect(res.body.data.attributes).toHaveProperty('address');
-    // The raw access token is revealed exactly once in the POST
-    // response; the merchant captures it and uses it on subsequent
-    // GETs and DELETEs.
     expect(res.body.data.attributes).toHaveProperty('token');
     expect(typeof res.body.data.attributes.token).toBe('string');
     expect((res.body.data.attributes.token as string).length).toBeGreaterThan(20);
+
+    const row = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('address', '=', 'Snew_address_567890abcdefghijklm12')
+      .executeTakeFirstOrThrow();
+    expect(row.amount_required).toBe(BigInt(1_000_000_000));
+    expect(row.status).toBe('new');
   });
 
   it('creates a wallet with valid base58 recipient', async () => {
-    const row = createSampleWalletRow({
-      address: 'Snew_address_567890abcdefghijklm12',
-      recipient: 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz',
-    });
-    mockPrismaWallets.create.mockResolvedValue(row);
-
     const res = await request
       .post('/wallets')
       .set('Content-Type', 'application/vnd.api+json')
@@ -98,6 +80,12 @@ describe('POST /wallets', () => {
       });
 
     expect(res.status).toBe(201);
+    const row = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('address', '=', 'Snew_address_567890abcdefghijklm12')
+      .executeTakeFirstOrThrow();
+    expect(row.recipient).toBe('SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz');
   });
 
   it('returns 400 for missing amountRequired', async () => {
@@ -105,10 +93,7 @@ describe('POST /wallets', () => {
       .post('/wallets')
       .set('Content-Type', 'application/vnd.api+json')
       .send({
-        data: {
-          type: 'wallets',
-          attributes: {},
-        },
+        data: { type: 'wallets', attributes: {} },
       });
 
     expect(res.status).toBe(400);
@@ -120,12 +105,7 @@ describe('POST /wallets', () => {
       .post('/wallets')
       .set('Content-Type', 'application/vnd.api+json')
       .send({
-        data: {
-          type: 'wallets',
-          attributes: {
-            amountRequired: 0,
-          },
-        },
+        data: { type: 'wallets', attributes: { amountRequired: 0 } },
       });
 
     expect(res.status).toBe(400);
@@ -138,10 +118,7 @@ describe('POST /wallets', () => {
       .send({
         data: {
           type: 'wallets',
-          attributes: {
-            amountRequired: 10,
-            recipient: 'invalid',
-          },
+          attributes: { amountRequired: 10, recipient: 'invalid' },
         },
       });
 
@@ -150,12 +127,17 @@ describe('POST /wallets', () => {
 });
 
 describe('GET /wallets/:address', () => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await truncateAll();
+  });
+
   it('returns wallet when found and token matches', async () => {
-    const row = createSampleWalletRow({
+    await insertWallet({
       address: 'Sfound_address_234567890abcdefgh12',
       token_hash: VALID_TOKEN_HASH,
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
 
     const res = await request
       .get('/wallets/Sfound_address_234567890abcdefgh12')
@@ -170,11 +152,10 @@ describe('GET /wallets/:address', () => {
   });
 
   it('returns 401 when the X-Wallet-Token header is missing', async () => {
-    const row = createSampleWalletRow({
+    await insertWallet({
       address: 'Sfound_address_234567890abcdefgh12',
       token_hash: VALID_TOKEN_HASH,
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
 
     const res = await request.get('/wallets/Sfound_address_234567890abcdefgh12');
 
@@ -183,11 +164,10 @@ describe('GET /wallets/:address', () => {
   });
 
   it('returns 401 when the token is wrong', async () => {
-    const row = createSampleWalletRow({
+    await insertWallet({
       address: 'Sfound_address_234567890abcdefgh12',
       token_hash: VALID_TOKEN_HASH,
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
 
     const res = await request
       .get('/wallets/Sfound_address_234567890abcdefgh12')
@@ -196,104 +176,118 @@ describe('GET /wallets/:address', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 when wallet not found', async () => {
-    mockPrismaWallets.findFirst.mockResolvedValue(null);
-
+  it('returns 401 (not 404) when the wallet does not exist — closes the probe oracle', async () => {
     const res = await request
       .get('/wallets/Snonexistent_1234567890abcdefgh12')
       .set('X-Wallet-Token', VALID_TOKEN);
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(401);
     expect(res.body.errors).toBeDefined();
   });
 });
 
 describe('DELETE /wallets/:address', () => {
-  beforeEach(() => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await truncateAll();
   });
 
   it('cancels a new wallet when the token matches', async () => {
-    const row = createSampleWalletRow({
+    const row = await insertWallet({
       address: 'Scancel_address_4567890abcdefghij',
-      status: 'new',
+      status: WalletStatus.new,
       token_hash: VALID_TOKEN_HASH,
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
-    mockPrismaWallets.update.mockResolvedValue({ ...row, status: 'expired' });
 
     const res = await request
       .delete('/wallets/Scancel_address_4567890abcdefghij')
       .set('X-Wallet-Token', VALID_TOKEN);
 
     expect(res.status).toBe(204);
-    expect(mockPrismaWallets.update).toHaveBeenCalledWith({
-      where: { id: row.id },
-      data: { status: 'expired' },
-    });
+    const after = await db
+      .selectFrom('wallets')
+      .select(['status'])
+      .where('id', '=', row.id)
+      .executeTakeFirstOrThrow();
+    expect(after.status).toBe('expired');
   });
 
   it('rejects DELETE without a token (401)', async () => {
-    const row = createSampleWalletRow({
+    await insertWallet({
       address: 'Scancel_address_4567890abcdefghij',
       token_hash: VALID_TOKEN_HASH,
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
 
     const res = await request.delete('/wallets/Scancel_address_4567890abcdefghij');
 
     expect(res.status).toBe(401);
-    expect(mockPrismaWallets.update).not.toHaveBeenCalled();
   });
 
   it('returns 409 when the wallet is not in status new', async () => {
-    const row = createSampleWalletRow({
+    await insertWallet({
       address: 'Scancel_address_4567890abcdefghij',
-      status: 'processed',
+      status: WalletStatus.processed,
       token_hash: VALID_TOKEN_HASH,
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
 
     const res = await request
       .delete('/wallets/Scancel_address_4567890abcdefghij')
       .set('X-Wallet-Token', VALID_TOKEN);
 
     expect(res.status).toBe(409);
-    expect(mockPrismaWallets.update).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when wallet not found', async () => {
-    mockPrismaWallets.findFirst.mockResolvedValue(null);
-
+  it('returns 401 when wallet not found (probe-oracle protection)', async () => {
     const res = await request
       .delete('/wallets/Snonexistent_1234567890abcdefgh12')
       .set('X-Wallet-Token', VALID_TOKEN);
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(401);
   });
 });
 
 describe('GET /wallets/:address/qr', () => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await truncateAll();
+  });
+
+  // base58 omits 0, O, I, l — sticking to a-k m-z 1-9 here so the
+  // shape regex in the controller accepts the fixture.
+  const KNOWN_ADDR = 'S5qrAddr678923abcdefghijkmnopqrstu';
+  const UNKNOWN_ADDR = 'S5nonexistent789abcdefghijkmnopqrs';
+
   it('returns QR code for existing wallet', async () => {
-    const row = createSampleWalletRow({
-      address: 'SqrAddr_34567890abcdefghijklmnop12',
-      amount_required: BigInt(1000000000),
+    await insertWallet({
+      address: KNOWN_ADDR,
+      amount_required: BigInt(1_000_000_000),
       amount_recieved: BigInt(0),
     });
-    mockPrismaWallets.findFirst.mockResolvedValue(row);
 
-    const res = await request.get('/wallets/SqrAddr_34567890abcdefghijklmnop12/qr');
+    const res = await request.get(`/wallets/${KNOWN_ADDR}/qr`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.attributes).toHaveProperty('qr');
     expect(res.body.data.attributes.qr).toMatch(/^data:image\/png;base64,/);
   });
 
-  it('returns 404 for non-existent wallet', async () => {
-    mockPrismaWallets.findFirst.mockResolvedValue(null);
+  // Unmanaged addresses must look exactly like managed-but-fully-funded
+  // ones from the outside — a 200 with a `data:image/png` payload — so
+  // the endpoint can't be used as a yes/no oracle for "does this grcpay
+  // mint this address?".
+  it('returns plain-address QR (200) for unknown wallet', async () => {
+    const res = await request.get(`/wallets/${UNKNOWN_ADDR}/qr`);
 
-    const res = await request.get('/wallets/Snonexistent_1234567890abcdefgh12/qr');
+    expect(res.status).toBe(200);
+    expect(res.body.data.attributes).toHaveProperty('qr');
+    expect(res.body.data.attributes.qr).toMatch(/^data:image\/png;base64,/);
+  });
 
-    expect(res.status).toBe(404);
+  it('rejects malformed addresses with 400', async () => {
+    const res = await request.get('/wallets/not-an-address/qr');
+
+    expect(res.status).toBe(400);
   });
 });

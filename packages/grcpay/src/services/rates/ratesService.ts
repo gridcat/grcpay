@@ -18,6 +18,7 @@ interface CachedCurrencies {
 
 class RatesServiceClass {
   private rateCache = new Map<string, CachedRate>();
+
   private currenciesCache: CachedCurrencies | null = null;
 
   /**

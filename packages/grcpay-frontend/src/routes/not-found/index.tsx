@@ -42,6 +42,7 @@ export function NotFound() {
             width={244}
             height={310}
             alt="Major Tom"
+            priority
           />
           <NotFoundError variant="h4" color="inherit">
             This page has been eaten by Major Tom!

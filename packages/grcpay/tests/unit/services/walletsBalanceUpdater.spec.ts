@@ -1,6 +1,8 @@
 import { WalletsBalanceUpdaterServiceClass } from '../../../src/services/wallet/walletsBalanceUpdater';
 import { WalletStatus } from '../../../src/models/Wallet';
-import { createMockWalletModel, createMockRpc } from '../../helpers/mocks';
+import { createMockRpc } from '../../helpers/mocks';
+import { db } from '../../../src/lib/db';
+import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
 const mockEmit = jest.fn();
 jest.mock('../../../src/lib/event', () => ({
@@ -9,93 +11,112 @@ jest.mock('../../../src/lib/event', () => ({
 
 describe('WalletsBalanceUpdaterService', () => {
   let service: WalletsBalanceUpdaterServiceClass;
-  let mockWallet: ReturnType<typeof createMockWalletModel>;
   let mockRpc: ReturnType<typeof createMockRpc>;
 
-  beforeEach(() => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
     jest.clearAllMocks();
-    mockWallet = createMockWalletModel();
+    await truncateAll();
     mockRpc = createMockRpc();
-    service = new WalletsBalanceUpdaterServiceClass(mockWallet as any, mockRpc as any);
+    service = new WalletsBalanceUpdaterServiceClass(mockRpc as never);
   });
 
   it('does nothing when no open wallets', async () => {
-    mockWallet.model.findMany.mockResolvedValue([]);
-
     await service.updateBalances();
 
     expect(mockRpc.getReceivedByAddress).not.toHaveBeenCalled();
   });
 
   it('checks balance for each open wallet', async () => {
-    const wallets = [
-      { id: 1, address: 'Saddr1_234567890abcdefghijklmnop', amount_recieved: BigInt(0) },
-      { id: 2, address: 'Saddr2_234567890abcdefghijklmnop', amount_recieved: BigInt(0) },
-    ];
-    mockWallet.model.findMany.mockResolvedValue(wallets);
+    await insertWallet({ address: 'Saddr1_234567890abcdefghijklmnop12', status: WalletStatus.new });
+    await insertWallet({ address: 'Saddr2_234567890abcdefghijklmnop12', status: WalletStatus.new });
     mockRpc.getReceivedByAddress.mockResolvedValue(0);
 
     await service.updateBalances();
 
-    expect(mockRpc.getReceivedByAddress).toHaveBeenCalledTimes(2);
-    expect(mockRpc.getReceivedByAddress).toHaveBeenCalledWith('Saddr1_234567890abcdefghijklmnop');
-    expect(mockRpc.getReceivedByAddress).toHaveBeenCalledWith('Saddr2_234567890abcdefghijklmnop');
+    // Two wallets × two probes each (confirmed + 0-conf) = 4 calls.
+    expect(mockRpc.getReceivedByAddress).toHaveBeenCalledTimes(4);
+    expect(mockRpc.getReceivedByAddress).toHaveBeenCalledWith('Saddr1_234567890abcdefghijklmnop12', expect.any(Number));
+    expect(mockRpc.getReceivedByAddress).toHaveBeenCalledWith('Saddr2_234567890abcdefghijklmnop12', expect.any(Number));
   });
 
-  it('updates DB when balance changes', async () => {
-    const wallets = [
-      { id: 1, address: 'Saddr1_234567890abcdefghijklmnop', amount_recieved: BigInt(0) },
-    ];
-    mockWallet.model.findMany.mockResolvedValue(wallets);
-    // RPC returns 5 GRC
-    mockRpc.getReceivedByAddress.mockResolvedValue(5);
+  it('updates DB when confirmed balance changes', async () => {
+    const row = await insertWallet({
+      address: 'Sbal_addr_4567890abcdefghijklmnopq',
+      amount_recieved: BigInt(0),
+      amount_pending: BigInt(0),
+      status: WalletStatus.new,
+    });
+    mockRpc.getReceivedByAddress.mockResolvedValue(5); // both confirmed and 0-conf
 
     await service.updateBalances();
 
-    expect(mockWallet.model.update).toHaveBeenCalledWith({
-      where: { id: 1 },
-      data: { amount_recieved: BigInt(500000000) },
+    const updated = await db
+      .selectFrom('wallets')
+      .select(['amount_recieved', 'amount_pending'])
+      .where('id', '=', row.id)
+      .executeTakeFirstOrThrow();
+    expect(updated.amount_recieved).toBe(BigInt(500_000_000));
+    expect(updated.amount_pending).toBe(BigInt(0));
+  });
+
+  it('records the pending delta when 0-conf exceeds confirmed', async () => {
+    const row = await insertWallet({
+      address: 'Spend_addr_4567890abcdefghijklmnopq',
+      amount_recieved: BigInt(0),
+      amount_pending: BigInt(0),
+      status: WalletStatus.new,
     });
+    // Confirmed call returns 0, 0-conf call returns 5 GRC.
+    mockRpc.getReceivedByAddress
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(5);
+
+    await service.updateBalances();
+
+    const updated = await db
+      .selectFrom('wallets')
+      .select(['amount_recieved', 'amount_pending'])
+      .where('id', '=', row.id)
+      .executeTakeFirstOrThrow();
+    expect(updated.amount_recieved).toBe(BigInt(0));
+    expect(updated.amount_pending).toBe(BigInt(500_000_000));
   });
 
   it('does not update DB when balance is unchanged', async () => {
-    const wallets = [
-      { id: 1, address: 'Saddr1_234567890abcdefghijklmnop', amount_recieved: BigInt(500000000) },
-    ];
-    mockWallet.model.findMany.mockResolvedValue(wallets);
+    const row = await insertWallet({
+      address: 'Ssame_addr_4567890abcdefghijklmnopq',
+      amount_recieved: BigInt(500_000_000),
+      amount_pending: BigInt(0),
+      status: WalletStatus.new,
+      updated_at: new Date(2020, 0, 1).toISOString(),
+    });
     mockRpc.getReceivedByAddress.mockResolvedValue(5);
 
     await service.updateBalances();
 
-    expect(mockWallet.model.update).not.toHaveBeenCalled();
+    const updated = await db
+      .selectFrom('wallets')
+      .select(['updated_at'])
+      .where('id', '=', row.id)
+      .executeTakeFirstOrThrow();
+    expect(updated.updated_at).toBe(row.updated_at);
   });
 
   it('emits log event on balance change', async () => {
-    const wallets = [
-      { id: 1, address: 'Saddr1_234567890abcdefghijklmnop', amount_recieved: BigInt(0) },
-    ];
-    mockWallet.model.findMany.mockResolvedValue(wallets);
+    const row = await insertWallet({
+      address: 'Slogn_addr_4567890abcdefghijklmnopq',
+      status: WalletStatus.new,
+    });
     mockRpc.getReceivedByAddress.mockResolvedValue(10);
 
     await service.updateBalances();
 
     expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
-      walletId: 1,
+      walletId: Number(row.id),
       action: 'amount_recieved',
       oldStatus: '0',
-      newStatus: String(BigInt(1000000000)),
+      newStatus: String(BigInt(1_000_000_000)),
     }));
-  });
-
-  it('queries only wallets with status new', async () => {
-    mockWallet.model.findMany.mockResolvedValue([]);
-
-    await service.updateBalances();
-
-    expect(mockWallet.model.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { status: WalletStatus.new },
-      }),
-    );
   });
 });

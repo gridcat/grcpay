@@ -14,8 +14,9 @@ export function Overview() {
           {' '}
           <code>application/vnd.api+json</code>
           {' '}
-          documents. There&apos;s no auth — by design — and the entire flow can be
-          driven from a half-dozen endpoints.
+          documents. No API keys, no accounts. Reads and cancels on a specific
+          wallet use a per-wallet token returned once at creation; everything else
+          is public. The entire flow can be driven from a half-dozen endpoints.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           The API base URL depends on how you deploy. In production at
@@ -45,16 +46,15 @@ export function Overview() {
           {' '}
           <code>grcpay.gridcoin.club/api</code>
           {' '}
-          install is free for now and provided as-is — no SLA, no warranty.
-          The recommended way to use GRCpay in production is to
+          install is free for now and provided as-is. No SLA, no warranty
+          (see the
+          {' '}
+          <Link href="/disclaimer#public-instance" style={{ color: 'inherit' }}>disclaimer</Link>
+          ). The recommended way to use GRCpay in production is to
           {' '}
           <Link href="/about#hosting" style={{ color: 'inherit' }}>run your own instance</Link>
           {' '}
-          against your own Gridcoin wallet. See the
-          {' '}
-          <Link href="/about#hosting" style={{ color: 'inherit' }}>hosting policy</Link>
-          {' '}
-          for the details.
+          against your own Gridcoin wallet.
         </Alert>
       </Box>
     </Box>

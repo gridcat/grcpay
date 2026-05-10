@@ -9,12 +9,7 @@ describe('QrCodeService', () => {
   });
 
   function createTestWallet(overrides: Partial<Wallet> = {}): Wallet {
-    const w = new (class extends Wallet {
-      constructor() {
-        // Avoid calling getPrisma() by passing a dummy
-        super({} as any);
-      }
-    })();
+    const w = new Wallet();
     w.address = 'Stest_address_234567890abcdefghij12';
     w.amountRequired = BigInt(1000000000); // 10 GRC
     w.amountRecieved = BigInt(0);

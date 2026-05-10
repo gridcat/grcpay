@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import { WalletMode } from '../../models/Wallet';
+import { GRC_ADDRESS_PATTERN } from '../../lib/address';
 
 interface WalletAttributes {
   amountRequired: number;
@@ -25,7 +26,7 @@ export const WalletSchema = Joi.object<WalletData>({
   id: Joi.any().optional(),
   amountRequired: Joi.number().required().positive(),
   recipient: Joi.string().optional().length(34).pattern(
-    /^[1-9A-HJ-NP-Za-km-z]{34}$/,
+    GRC_ADDRESS_PATTERN,
     'base58 address',
   ),
   // Narrow the accepted set to the modes we actually implement today.

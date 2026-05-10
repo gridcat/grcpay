@@ -1,7 +1,9 @@
 import { WalletsCreatorServiceClass } from '../../../src/services/wallet/walletCreatorService';
-import { createMockWalletModel, createMockRpc, createSampleWalletRow } from '../../helpers/mocks';
+import { WalletMode } from '../../../src/models/Wallet';
+import { createMockRpc } from '../../helpers/mocks';
+import { db } from '../../../src/lib/db';
+import { setupTestDb, truncateAll } from '../../helpers/db';
 
-// Mock the event emitter
 const mockEmit = jest.fn();
 jest.mock('../../../src/lib/event', () => ({
   getEventEmitter: () => ({ emit: mockEmit, on: jest.fn() }),
@@ -9,41 +11,41 @@ jest.mock('../../../src/lib/event', () => ({
 
 describe('WalletsCreatorService', () => {
   let service: WalletsCreatorServiceClass;
-  let mockWallet: ReturnType<typeof createMockWalletModel>;
   let mockRpc: ReturnType<typeof createMockRpc>;
 
-  beforeEach(() => {
+  beforeAll(setupTestDb);
+  beforeEach(async () => {
     jest.clearAllMocks();
-    mockWallet = createMockWalletModel();
+    await truncateAll();
     mockRpc = createMockRpc();
-    service = new WalletsCreatorServiceClass(mockWallet as any, mockRpc as any);
+    service = new WalletsCreatorServiceClass(mockRpc as never);
   });
 
   it('creates a wallet with a generated address', async () => {
-    const row = createSampleWalletRow({ amount_required: BigInt(1000000000) });
     mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
-    mockWallet.model.create.mockResolvedValue(row);
 
     const result = await service.createWallet(10);
 
     expect(mockRpc.getNewAddress).toHaveBeenCalled();
-    expect(mockWallet.model.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          address: 'Sgenerated_address_1234567890abcde',
-          status: 'new',
-          amount_recieved: 0,
-        }),
-      }),
-    );
-    expect(result.address).toBe(row.address);
+    expect(result.address).toBe('Sgenerated_address_1234567890abcde');
+    expect(result.status).toBe('new');
+    expect(result.amountRecieved).toBe(BigInt(0));
+
+    const row = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('address', '=', 'Sgenerated_address_1234567890abcde')
+      .executeTakeFirstOrThrow();
+    expect(row.status).toBe('new');
+    expect(row.amount_required).toBe(BigInt(1_000_000_000));
+    expect(row.amount_recieved).toBe(BigInt(0));
+    expect(row.token_hash).toHaveLength(64);
   });
 
   it('refills keypool on getNewAddress failure', async () => {
     mockRpc.getNewAddress
       .mockRejectedValueOnce(new Error('keypool depleted'))
       .mockResolvedValueOnce('Srecovery_address_1234567890abcdef');
-    mockWallet.model.create.mockResolvedValue(createSampleWalletRow());
 
     await service.createWallet(5);
 
@@ -63,12 +65,11 @@ describe('WalletsCreatorService', () => {
 
   it('emits audit log events', async () => {
     mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
-    mockWallet.model.create.mockResolvedValue(createSampleWalletRow());
 
-    await service.createWallet(10, 'Srecipient_addr_234567890abcdef12');
+    await service.createWallet(10, 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz');
 
-    // Should emit: amount_required, status, address, recipient, mode
-    // (lifespan_seconds is only emitted when a non-default is provided).
+    // amount_required, status, address, recipient, mode (lifespan only
+    // emitted when a non-default value is supplied).
     expect(mockEmit).toHaveBeenCalledTimes(5);
     expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({ action: 'amount_required' }));
     expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({ action: 'status', newStatus: 'new' }));
@@ -77,56 +78,56 @@ describe('WalletsCreatorService', () => {
     expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({ action: 'mode', newStatus: 'checkout' }));
   });
 
-  it('passes recipient to DB when provided', async () => {
+  it('persists recipient when provided', async () => {
     mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
-    mockWallet.model.create.mockResolvedValue(
-      createSampleWalletRow({ recipient: 'Srecipient_addr_234567890abcdef12' }),
-    );
 
-    await service.createWallet(10, 'Srecipient_addr_234567890abcdef12');
+    await service.createWallet(10, 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz');
 
-    expect(mockWallet.model.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          recipient: 'Srecipient_addr_234567890abcdef12',
-        }),
-      }),
-    );
+    const row = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('address', '=', 'Sgenerated_address_1234567890abcde')
+      .executeTakeFirstOrThrow();
+    expect(row.recipient).toBe('SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz');
   });
 
   it('defaults mode to checkout and lifespan to null', async () => {
     mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
-    mockWallet.model.create.mockResolvedValue(createSampleWalletRow());
 
     await service.createWallet(10);
 
-    expect(mockWallet.model.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          mode: 'checkout',
-          lifespan_seconds: null,
-        }),
-      }),
-    );
+    const row = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('address', '=', 'Sgenerated_address_1234567890abcde')
+      .executeTakeFirstOrThrow();
+    expect(row.mode).toBe('checkout');
+    expect(row.lifespan_seconds).toBeNull();
   });
 
   it('emits a lifespan_seconds audit log entry when a custom lifespan is supplied', async () => {
     mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
-    mockWallet.model.create.mockResolvedValue(createSampleWalletRow());
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await service.createWallet(10, undefined, 'checkout' as any, 3600);
+    await service.createWallet(10, undefined, WalletMode.checkout, 3600);
 
-    expect(mockWallet.model.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          lifespan_seconds: 3600,
-        }),
-      }),
-    );
+    const row = await db
+      .selectFrom('wallets')
+      .select(['lifespan_seconds'])
+      .where('address', '=', 'Sgenerated_address_1234567890abcde')
+      .executeTakeFirstOrThrow();
+    expect(row.lifespan_seconds).toBe(BigInt(3600));
     expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
       action: 'lifespan_seconds',
       newStatus: '3600',
     }));
+  });
+
+  it('rejects an invalid recipient address before minting one', async () => {
+    mockRpc.validateAddress.mockResolvedValueOnce({ isvalid: false });
+
+    await expect(
+      service.createWallet(10, 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz'),
+    ).rejects.toThrow(/not a valid Gridcoin address/);
+    expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
   });
 });

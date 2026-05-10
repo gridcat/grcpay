@@ -30,7 +30,7 @@ export function Configure() {
           <ListItem>
             <ListItemText
               primary="Recipient address"
-              secondary="Your merchant Gridcoin address — funds are forwarded here automatically once a customer pays."
+              secondary="Your merchant Gridcoin address. Funds are forwarded here automatically once a customer pays."
             />
           </ListItem>
         </List>

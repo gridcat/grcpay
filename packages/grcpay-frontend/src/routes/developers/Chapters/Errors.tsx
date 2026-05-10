@@ -38,15 +38,15 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>200 OK</code>
+              :
               {' '}
-              — successful GET.
+              successful GET.
             </Typography>
           </li>
           <li>
             <Typography variant="body1">
               <code>201 Created</code>
-              {' '}
-              — successful
+              : successful
               {' '}
               <code>POST /wallets</code>
               . The body contains the one-time
@@ -60,8 +60,7 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>204 No Content</code>
-              {' '}
-              — successful
+              : successful
               {' '}
               <code>DELETE /wallets/:address</code>
               . The wallet is now
@@ -75,8 +74,7 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>400 Bad Request</code>
-              {' '}
-              — validation failed on the POST body (missing
+              : validation failed on the POST body (missing
               {' '}
               <code>amountRequired</code>
               , invalid base58 recipient, etc.).
@@ -85,8 +83,7 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>401 Unauthorized</code>
-              {' '}
-              — you didn&apos;t send the
+              : you didn&apos;t send the
               {' '}
               <code>X-Wallet-Token</code>
               {' '}
@@ -98,8 +95,7 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>404 Not Found</code>
-              {' '}
-              — the address genuinely doesn&apos;t exist (and you
+              : the address genuinely doesn&apos;t exist (and you
               <i> did </i>
               authenticate).
             </Typography>
@@ -107,8 +103,7 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>409 Conflict</code>
-              {' '}
-              — you tried to
+              : you tried to
               {' '}
               <code>DELETE</code>
               {' '}
@@ -128,8 +123,7 @@ export function Errors() {
           <li>
             <Typography variant="body1">
               <code>429 Too Many Requests</code>
-              {' '}
-              — you&apos;re hitting the per-IP rate limit.
+              : you&apos;re hitting the per-IP rate limit.
             </Typography>
           </li>
         </Box>

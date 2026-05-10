@@ -11,7 +11,7 @@ export function Status() {
       </Typography>
       <Box component="article">
         <Typography gutterBottom variant="body1" component="p">
-          Returns the service name and version. Cheap call — use it for health checks.
+          Returns the service name and version. Cheap call. Use it for health checks.
         </Typography>
         <Endpoint method="GET" path="/api/status" title="Service health" />
         <CodeBlock

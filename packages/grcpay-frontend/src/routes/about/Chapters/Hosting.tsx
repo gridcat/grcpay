@@ -4,6 +4,7 @@ import {
   Alert,
   AlertTitle,
 } from '@mui/material';
+
 import React from 'react';
 import { NextMuiLink } from '@/components/NextMuiLink';
 
@@ -60,34 +61,22 @@ export function Hosting() {
           <code>https://grcpay.gridcoin.club/api</code>
           {' '}
           that anyone can point their plugin or integration at. It&apos;s a
-          fast way to try the protocol end-to-end without standing up your
-          own stack first, and it&apos;s the same code you&apos;d run
-          yourself.
+          fast way to try the protocol without standing up your own stack
+          first, and it&apos;s the same code you&apos;d run yourself.
         </Typography>
         <Alert severity="warning" variant="outlined" sx={{ my: 2 }}>
-          <AlertTitle>Use the public instance at your own risk</AlertTitle>
-          The public
-          {' '}
-          <code>grcpay.gridcoin.club</code>
-          {' '}
-          install is provided as a courtesy. There is
+          The public install is provided as a courtesy with
           {' '}
           <b>no SLA, no uptime guarantee, and no warranty</b>
-          . It may go
-          down, change behaviour, or be retired without notice. If you choose
-          to depend on it for real customer payments, you do so entirely at
-          your own risk. We strongly recommend running your own instance as
-          soon as you go to production.
-        </Alert>
-        <Alert severity="info" variant="outlined" sx={{ my: 2 }}>
-          <AlertTitle>Free for now</AlertTitle>
-          Usage of the public instance is currently
           {' '}
-          <b>free of charge</b>
-          . If load gets heavy enough that it becomes a problem for the
-          ecosystem, we may revisit this — for example by adding rate limits,
-          a paid tier, or an allowlist. Self-hosters are unaffected by any of
-          that.
+          — see the
+          {' '}
+          <NextMuiLink href="/disclaimer#public-instance" color="primary">
+            disclaimer
+          </NextMuiLink>
+          {' '}
+          for the details. We strongly recommend running your own instance
+          as soon as you go to production.
         </Alert>
       </Box>
     </Box>

@@ -61,7 +61,7 @@ export function HotCold() {
         <Typography gutterBottom variant="body1" component="p">
           GRCpay&apos;s public REST surface is deliberately narrow, but
           the worst-case scenario for any internet-facing service is a
-          full host compromise — a kernel exploit, a supply-chain attack
+          full host compromise: a kernel exploit, a supply-chain attack
           on a dependency, a misconfigured SSH key, anything. If that
           happens, the attacker gets shell access to the box GRCpay runs
           on, and from there, full access to whatever wallet GRCpay is
@@ -71,7 +71,7 @@ export function HotCold() {
           With a single-wallet setup, that&apos;s every GRC you&apos;ve
           ever earned. With the hot/cold split, the attacker drains the
           hot wallet and walks away with only whatever happened to be
-          mid-settlement at that moment — typically zero or a single
+          mid-settlement at that moment. Typically zero, or a single
           order&apos;s worth of GRC. The blast radius shrinks from
           &ldquo;everything&rdquo; to &ldquo;maybe a few minutes of
           revenue.&rdquo;
@@ -173,8 +173,8 @@ export function HotCold() {
           wallet&apos;s balance over time should look like a sawtooth:
           near-zero baseline, brief spikes when customers pay, dropping
           straight back down within seconds. If you ever see the
-          baseline drift upward — funds accumulating that aren&apos;t
-          being forwarded — that&apos;s a signal something is wrong:
+          baseline drift upward (funds accumulating that aren&apos;t
+          being forwarded), that&apos;s a signal something is wrong:
           the cold address is invalid, the forwarding flow hit an error,
           or you&apos;ve got wallets stuck in
           {' '}
@@ -190,7 +190,7 @@ export function HotCold() {
         <Alert severity="info" variant="outlined" sx={{ my: 2 }}>
           The hot wallet does need
           <i> some </i>
-          GRC of its own — just enough to pay the network fee on each
+          GRC of its own. Just enough to pay the network fee on each
           forward leg (
           <code>0.001 GRC</code>
           {' '}

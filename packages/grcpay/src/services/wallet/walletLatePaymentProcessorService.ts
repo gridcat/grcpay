@@ -1,15 +1,14 @@
-import { wallets } from '@prisma/client';
-import { Wallet, WalletStatus } from '../../models/Wallet';
+import { WalletStatus } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
+import { db, now } from '../../lib/db';
 import { config } from '../../config';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
 import { canRetryRefund } from '../../lib/refundBackoff';
-import { grc2halford } from '../../lib/nomination';
-
-const minFeeHalford = BigInt(Math.round(config.MIN_FEE * config.HALFORD));
+import { grc2halford, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import type { WalletRow } from '../../lib/database';
 
 /**
  * Catches GRC sent to a wallet that already settled — the stale
@@ -21,7 +20,6 @@ const minFeeHalford = BigInt(Math.round(config.MIN_FEE * config.HALFORD));
  */
 export class WalletLatePaymentProcessorServiceClass {
   constructor(
-    private wallet = new Wallet(),
     private grcRpc = rpc,
   ) {}
 
@@ -35,43 +33,19 @@ export class WalletLatePaymentProcessorServiceClass {
       return;
     }
 
-    const cutoff = new Date(Date.now() - config.LATE_PAYMENT_WINDOW * 1000);
-    const candidates = await this.wallet.model.findMany({
-      select: {
-        id: true,
-        address: true,
-        amount_recieved: true,
-        amount_pending: true,
-        amount_required: true,
-        status: true,
-        recipient: true,
-        tx_out: true,
-        refund_tx: true,
-        refund_amount: true,
-        refund_attempts: true,
-        mode: true,
-        lifespan_seconds: true,
-        token_hash: true,
-        created_at: true,
-        updated_at: true,
-      },
-      where: {
-        status: {
-          in: [
-            WalletStatus.processed,
-            WalletStatus.refunded,
-            WalletStatus.norefund,
-          ],
-        },
-        updated_at: {
-          gte: cutoff,
-        },
-      },
-    });
+    const cutoffIso = new Date(Date.now() - config.LATE_PAYMENT_WINDOW * 1000).toISOString();
+    const candidates = await db
+      .selectFrom('wallets')
+      .selectAll()
+      .where('status', 'in', [
+        WalletStatus.processed,
+        WalletStatus.refunded,
+        WalletStatus.norefund,
+      ])
+      .where('updated_at', '>=', cutoffIso)
+      .execute();
 
-    if (!candidates.length) {
-      return;
-    }
+    if (!candidates.length) return;
     log.info(`${candidates.length} terminal wallet(s) to scan for late payments`);
 
     for (const wallet of candidates) {
@@ -79,14 +53,15 @@ export class WalletLatePaymentProcessorServiceClass {
     }
   }
 
-  private async processOne(wallet: wallets): Promise<void> {
+  private async processOne(wallet: WalletRow): Promise<void> {
+    const attempts = Number(wallet.refund_attempts);
     if (
-      wallet.refund_attempts > 0
-      && !canRetryRefund(wallet.refund_attempts, wallet.updated_at)
+      attempts > 0
+      && !canRetryRefund(attempts, new Date(wallet.updated_at))
     ) {
       log.info(
         `Skipping late-payment retry on ${wallet.address} — backoff window not elapsed `
-        + `(attempts=${wallet.refund_attempts})`,
+        + `(attempts=${attempts})`,
       );
       return;
     }
@@ -112,16 +87,17 @@ export class WalletLatePaymentProcessorServiceClass {
     // Dust — bump amount_recieved so we stop re-detecting it; merchant
     // implicitly absorbs the tip.
     if (delta <= minFeeHalford) {
-      await this.wallet.model.update({
-        where: { id: wallet.id },
-        data: { amount_recieved: balanceHalford },
-      });
+      await db
+        .updateTable('wallets')
+        .set({ amount_recieved: balanceHalford, updated_at: now() })
+        .where('id', '=', wallet.id)
+        .execute();
       log.info(
         `Late payment on ${wallet.address} is ${delta} halford — smaller than `
         + 'the network fee, absorbing as tip.',
       );
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'late_dust',
         newStatus: String(delta),
       });
@@ -132,10 +108,11 @@ export class WalletLatePaymentProcessorServiceClass {
     if (!sender) {
       // No sender → bump amount_recieved so we stop spinning on the
       // same delta. Funds stay in the hot wallet for manual sweep.
-      await this.wallet.model.update({
-        where: { id: wallet.id },
-        data: { amount_recieved: balanceHalford },
-      });
+      await db
+        .updateTable('wallets')
+        .set({ amount_recieved: balanceHalford, updated_at: now() })
+        .where('id', '=', wallet.id)
+        .execute();
       log.warn(
         `Late payment on ${wallet.address} cannot be refunded: sender address `
         + 'could not be determined. Funds left in hot wallet.',
@@ -153,52 +130,57 @@ export class WalletLatePaymentProcessorServiceClass {
         + `${wallet.address} (tx ${tx}).`,
       );
       const newRefundTotal = (wallet.refund_amount ?? BigInt(0)) + refundHalford;
-      await this.wallet.model.update({
-        where: { id: wallet.id },
-        data: {
+      await db
+        .updateTable('wallets')
+        .set({
           amount_recieved: balanceHalford,
           refund_amount: newRefundTotal,
           // Preserve any prior refund_tx; the late refund txid lands
           // in db_logs only.
           refund_tx: wallet.refund_tx ?? tx,
-          refund_attempts: 0,
-        },
-      });
+          refund_attempts: BigInt(0),
+          updated_at: now(),
+        })
+        .where('id', '=', wallet.id)
+        .execute();
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'late_refund',
         newStatus: tx,
       });
     } catch (e) {
-      const attempts = wallet.refund_attempts + 1;
+      const nextAttempts = attempts + 1;
       log.error(
-        `Late refund attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS} failed for `
+        `Late refund attempt ${nextAttempts}/${config.MAX_REFUND_ATTEMPTS} failed for `
         + `${wallet.address} (${refundGrc} GRC to ${sender}): ${e}`,
       );
 
-      if (attempts >= config.MAX_REFUND_ATTEMPTS) {
+      if (nextAttempts >= config.MAX_REFUND_ATTEMPTS) {
         // Give up: bump amount_recieved so we stop, reset the counter.
-        await this.wallet.model.update({
-          where: { id: wallet.id },
-          data: {
+        await db
+          .updateTable('wallets')
+          .set({
             amount_recieved: balanceHalford,
-            refund_attempts: 0,
-          },
-        });
+            refund_attempts: BigInt(0),
+            updated_at: now(),
+          })
+          .where('id', '=', wallet.id)
+          .execute();
         log.error(
           `Late refund for ${wallet.address} exhausted retries — leaving `
           + 'funds in hot wallet for operator sweep.',
         );
         getEventEmitter<DbLogMessage>().emit('log', {
-          walletId: wallet.id,
+          walletId: Number(wallet.id),
           action: 'late_refund_abandoned',
           newStatus: String(delta),
         });
       } else {
-        await this.wallet.model.update({
-          where: { id: wallet.id },
-          data: { refund_attempts: attempts },
-        });
+        await db
+          .updateTable('wallets')
+          .set({ refund_attempts: BigInt(nextAttempts), updated_at: now() })
+          .where('id', '=', wallet.id)
+          .execute();
       }
     }
   }

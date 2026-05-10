@@ -4,33 +4,20 @@ import axios from 'axios';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-// Mock prisma and rpc to avoid startup errors
-jest.mock('../../../src/lib/prisma', () => ({
-  getPrisma: () => ({
-    wallets: {
-      findMany: jest.fn().mockResolvedValue([]),
-      findFirst: jest.fn().mockResolvedValue(null),
-      create: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-    },
-    db_logs: {
-      create: jest.fn().mockResolvedValue({}),
-    },
-  }),
-  disconnect: jest.fn(),
-}));
-
 jest.mock('../../../src/lib/gridcoin', () => ({
   rpc: { getWalletInfo: jest.fn() },
   connect: jest.fn().mockResolvedValue(true),
 }));
 
+// eslint-disable-next-line import/first
 import { app } from '../../../src/api';
+// eslint-disable-next-line import/first
+import { setupTestDb } from '../../helpers/db';
 
 const request = supertest(app);
 
 describe('GET /rates/:currency', () => {
+  beforeAll(setupTestDb);
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -61,6 +48,8 @@ describe('GET /rates/:currency', () => {
 });
 
 describe('GET /rates', () => {
+  beforeAll(setupTestDb);
+
   it('returns supported currencies list', async () => {
     mockedAxios.get.mockResolvedValueOnce({ data: ['eur', 'usd', 'gbp', 'jpy'] });
 

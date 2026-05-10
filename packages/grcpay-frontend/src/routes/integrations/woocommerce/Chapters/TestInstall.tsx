@@ -6,6 +6,7 @@ import {
   Button,
 } from '@mui/material';
 import LaunchIcon from '@mui/icons-material/Launch';
+import { linkRel } from '@/lib/externalRel';
 
 const TEST_INSTALL_URL = 'https://TBD-woo-demo.example.com/';
 
@@ -19,8 +20,8 @@ export function TestInstall() {
         <Typography gutterBottom variant="body1" component="p">
           We host a sandbox WooCommerce store with the GRCpay plugin
           pre-configured. Add a test product to your cart, hit the checkout,
-          and watch the on-chain payment flow end-to-end before you install
-          anything yourself.
+          and watch the on-chain payment flow before you install anything
+          yourself.
         </Typography>
         <Alert severity="warning" sx={{ mb: 2 }}>
           The sandbox runs against a testnet wallet. Do not send mainnet GRC.
@@ -31,7 +32,7 @@ export function TestInstall() {
           endIcon={<LaunchIcon />}
           href={TEST_INSTALL_URL}
           target="_blank"
-          rel="noopener noreferrer"
+          rel={linkRel(TEST_INSTALL_URL, '_blank')}
         >
           Open the demo store
         </Button>
@@ -40,7 +41,7 @@ export function TestInstall() {
           {' '}
           <code>{TEST_INSTALL_URL}</code>
           {' '}
-          (TBD — replace once the sandbox is hosted).
+          (TBD; replace once the sandbox is hosted).
         </Typography>
       </Box>
     </Box>

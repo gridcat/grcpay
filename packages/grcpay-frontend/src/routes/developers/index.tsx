@@ -7,7 +7,8 @@ import {
   Typography,
 } from '@mui/material';
 import { Header } from '@/components/Header/Header';
-import { Seo, SITE_NAME } from '@/components/Seo';
+import { Seo, SITE_NAME, SITE_URL } from '@/components/Seo';
+import { AUTHOR_GRIDCAT, breadcrumbList, PUBLISHER_ORG } from '@/lib/structuredData';
 import { Footer } from '@/components/Footer/Footer';
 import { GradientLine } from '@/components/GradientLine';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
@@ -35,6 +36,25 @@ export function Page() {
         description="Reference for the GRCpay REST API: create payment wallets, look up status, fetch QR codes, and convert fiat amounts via the rates endpoint."
         path="/developers"
         ogType="article"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'TechArticle',
+              headline: `${SITE_NAME} API Reference`,
+              description: 'Reference for the GRCpay REST API: create payment wallets, look up status, fetch QR codes, and convert fiat amounts.',
+              mainEntityOfPage: `${SITE_URL}/developers`,
+              author: AUTHOR_GRIDCAT,
+              publisher: PUBLISHER_ORG,
+              articleSection: 'API Documentation',
+              proficiencyLevel: 'Expert',
+            },
+            breadcrumbList([
+              { name: 'Home', path: '/' },
+              { name: 'API', path: '/developers' },
+            ]),
+          ],
+        }}
       />
       <PageWrapper>
         <Header />
@@ -49,8 +69,8 @@ export function Page() {
                 API reference
               </Typography>
               <Typography gutterBottom variant="body1" component="p">
-                Everything you need to integrate GRCpay from your own backend or
-                ecommerce platform.
+                Reference for integrating GRCpay from your backend or ecommerce
+                platform.
               </Typography>
               <Overview />
               <Conventions />

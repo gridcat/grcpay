@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { NavMenuMobile } from '@/components/Navigation/NavMenuMobile';
 import { useRouteNavigating } from '@/hooks';
+import { IS_TESTNET } from '@/lib/network';
 import { NavMenuDesktop } from '../Navigation/NavMenuDesktop';
 
 interface Props {
@@ -64,17 +65,16 @@ export function Header({ showLinks = true }: HeaderProps) {
             />
           )}
           <Container maxWidth="xl" sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box>
-              <Link
-                passHref
-                href="/"
-                style={{
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
+            <Link
+              passHref
+              href="/"
+              style={{
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
                 <Image
                   src="/ic-logo.svg"
                   width={isMobile && mounted ? 32 : 40}
@@ -96,8 +96,26 @@ export function Header({ showLinks = true }: HeaderProps) {
                 >
                   GRCpay
                 </Typography>
+                {IS_TESTNET && (
+                  <Box
+                    component="span"
+                    sx={{
+                      ml: 1,
+                      px: 1,
+                      py: 0.25,
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      letterSpacing: 1.4,
+                      color: theme.palette.primary.main,
+                      border: `1px solid ${theme.palette.primary.main}`,
+                      borderRadius: 1,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    TESTNET
+                  </Box>
+                )}
               </Link>
-            </Box>
 
             <Toolbar
               sx={{

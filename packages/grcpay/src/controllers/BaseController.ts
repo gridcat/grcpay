@@ -59,9 +59,7 @@ export interface Pagination {
 }
 
 export interface Sorting {
-  order: [{
-    [key: string]: SortOrder;
-  }];
+  order: { [key: string]: SortOrder }[];
 }
 
 export interface Fields {
@@ -156,17 +154,21 @@ export class Controller {
     if (!query) return;
     let empty = true;
     if ('fields' in query && query.fields) {
-      const fields = Object.entries(query.fields).reduce((prev: { [key: string]: string[] }, curr) => {
-        const [key, values] = curr;
-        if (values) {
-          empty = false;
-          const newFields = prev;
-          // Filter out all non-fields-like values
-          newFields[key] = values.split(/,/).filter((field) => field.match(/^[a-zA-Z_0-9]+$/)).filter(Boolean);
-          return newFields;
-        }
-        return prev;
-      }, {});
+      const fields = Object.entries(query.fields).reduce(
+        (prev: { [key: string]: string[] }, curr) => {
+          const [key, values] = curr;
+          if (values) {
+            empty = false;
+            const newFields = prev;
+            newFields[key] = values.split(/,/)
+              .filter((field) => field.match(/^[a-zA-Z_0-9]+$/))
+              .filter(Boolean);
+            return newFields;
+          }
+          return prev;
+        },
+        {},
+      );
       if (!empty) {
         this.useFields = fields;
       }
@@ -184,7 +186,7 @@ export class Controller {
     const query = this.req.query as unknown as Query;
     if (!query) return;
     if ('sort' in query) {
-      const fields: [{ [key: string]: SortOrder }] = query.sort.split(/,/).reduce((orderByArray, currentElem) => {
+      const fields: { [key: string]: SortOrder }[] = query.sort.split(/,/).reduce((orderByArray, currentElem) => {
         let fieldName: string = currentElem;
         let order: SortOrder;
         order = SortOrder.asc;
@@ -198,7 +200,7 @@ export class Controller {
 
         orderByArray.push({ [fieldName]: order });
         return orderByArray;
-      }, [] as any);
+      }, [] as { [key: string]: SortOrder }[]);
       if (fields) {
         this.useSort = { order: fields };
       }
@@ -218,22 +220,26 @@ export class Controller {
     if (!query || !this.model) return;
     const { attributes } = this.model;
     if ('filter' in query && query.filter) {
-      const filter = query.filter as Record<string, any>;
+      // JSON:API filter values are either a comma-separated string or a
+      // nested `{gt: "5"}` / `{in: "a,b"}` object. Typed as unknown and
+      // narrowed per-branch below.
+      const filter = query.filter as Record<string, unknown>;
       this.allFilters = filter as Record<string, string>;
-      // Store fields so we can use it for the search
       let filters: Filters = {};
       Object.keys(filter).forEach((key) => {
         let dbProperKey = key;
-        const attr = (attributes as Record<string, any>)[key];
+        const attr = (attributes as unknown as Record<string, { field?: string } | undefined>)[key];
         if (attr && attr.field) {
           dbProperKey = attr.field;
         }
-        if (this.isObject(filter[key])) {
-          const filterTypeUnresolved = ([Object.keys(filter[key])]).toString();
+        const value = filter[key];
+        if (this.isObject(value)) {
+          const nested = value as Record<string, string>;
+          const filterTypeUnresolved = ([Object.keys(nested)]).toString();
           if (Object.values(FilterTypes).includes(filterTypeUnresolved)) {
             const filterType = (MapFilterTypes as Record<string, string>)[filterTypeUnresolved];
-            let list = filter[key][filterTypeUnresolved].split(',');
-            list = list.map((value: any) => (Number.isNaN(value) ? value : BigInt(value)));
+            let list: unknown[] = nested[filterTypeUnresolved].split(',');
+            list = list.map((v) => (Number.isNaN(v) ? v : BigInt(v as string)));
 
             filters = {
               ...filters,
@@ -241,7 +247,7 @@ export class Controller {
             };
           }
         } else {
-          const list = filter[key].split(',');
+          const list = (value as string).split(',');
           if (list.length > 1) {
             filters = {
               ...filters,

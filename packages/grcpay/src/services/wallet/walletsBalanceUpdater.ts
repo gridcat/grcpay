@@ -1,5 +1,6 @@
-import { Wallet, WalletStatus } from '../../models/Wallet';
+import { WalletStatus } from '../../models/Wallet';
 import { rpc } from '../../lib/gridcoin';
+import { db, now } from '../../lib/db';
 import { config } from '../../config';
 import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
@@ -7,7 +8,7 @@ import { DbLogMessage } from '../dbLog/dbLogService';
 import { grc2halford } from '../../lib/nomination';
 
 interface OpenWallet {
-  id: number;
+  id: bigint;
   address: string;
   amount_recieved: bigint;
   amount_pending: bigint;
@@ -15,7 +16,6 @@ interface OpenWallet {
 
 export class WalletsBalanceUpdaterServiceClass {
   constructor(
-    private wallet = new Wallet(),
     private grcRpc = rpc,
   ) {}
 
@@ -26,34 +26,18 @@ export class WalletsBalanceUpdaterServiceClass {
    */
   public async updateBalances(): Promise<void> {
     log.info('Check open wallets balances');
-    const openWallets = await this.wallet.model.findMany({
-      select: {
-        id: true,
-        address: true,
-        amount_recieved: true,
-        amount_pending: true,
-      },
-      where: {
-        status: {
-          // Both `new` (no payment yet or partial) and `confirming`
-          // (payment seen on-chain but not yet MIN_CONFIRMATIONS deep)
-          // are still waiting for balance updates. Excluding confirming
-          // here would leave its pending→confirmed transition blind.
-          in: [WalletStatus.new, WalletStatus.confirming],
-        },
-      },
-    });
-    if (!openWallets.length) {
-      return;
-    }
-    const promisesPool: Promise<void>[] = [];
+    const openWallets = await db
+      .selectFrom('wallets')
+      .select(['id', 'address', 'amount_recieved', 'amount_pending'])
+      // Both `new` (no payment yet or partial) and `confirming`
+      // (payment seen on-chain but not yet MIN_CONFIRMATIONS deep)
+      // are still waiting for balance updates. Excluding confirming
+      // here would leave its pending→confirmed transition blind.
+      .where('status', 'in', [WalletStatus.new, WalletStatus.confirming])
+      .execute();
+    if (!openWallets.length) return;
 
-    for (let i = 0; i < openWallets.length; i++) {
-      const wallet = openWallets[i];
-      promisesPool.push(this.updateWalletBalance(wallet));
-    }
-
-    await Promise.all(promisesPool);
+    await Promise.all(openWallets.map((w) => this.updateWalletBalance(w)));
   }
 
   /**
@@ -90,19 +74,20 @@ export class WalletsBalanceUpdaterServiceClass {
       log.info(`Do not update wallet ${wallet.address} as balance didn't get changed: ${confirmedGrc} grc settled, ${totalGrc} grc total`);
       return;
     }
-    await this.wallet.model.update({
-      where: {
-        id: wallet.id,
-      },
-      data: {
+
+    await db
+      .updateTable('wallets')
+      .set({
         amount_recieved: balanceHalford,
         amount_pending: pendingHalford,
-      },
-    });
+        updated_at: now(),
+      })
+      .where('id', '=', wallet.id)
+      .execute();
 
     if (balanceHalford !== wallet.amount_recieved) {
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'amount_recieved',
         oldStatus: String(wallet.amount_recieved),
         newStatus: String(balanceHalford),
@@ -110,7 +95,7 @@ export class WalletsBalanceUpdaterServiceClass {
     }
     if (pendingHalford !== wallet.amount_pending) {
       getEventEmitter<DbLogMessage>().emit('log', {
-        walletId: wallet.id,
+        walletId: Number(wallet.id),
         action: 'amount_pending',
         oldStatus: String(wallet.amount_pending),
         newStatus: String(pendingHalford),

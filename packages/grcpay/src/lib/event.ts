@@ -1,6 +1,6 @@
 import EventEmitter from 'events';
 
-type Types = 'log' | 'log';
+type Types = 'log';
 
 const eventEmitter = new EventEmitter();
 
