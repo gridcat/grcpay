@@ -47,6 +47,11 @@ jobs:
               echo "grcpay deps cache hit — skipping install"
             else
               npm ci
+              # ignore-scripts=true (.npmrc) blocks the better-sqlite3
+              # postinstall that downloads/builds the native binding,
+              # so we invoke it explicitly. The compiled .node file
+              # gets cached alongside node_modules.
+              npm run rebuild:native
               echo "$HASH" > node_modules/.lockfile-hash
             fi
       - run:
@@ -394,6 +399,7 @@ workflows:
               ignore: /.*/
 
       - grcpay-release:
+          context: semantic-release
           requires:
             - grcpay-checks
           filters:
@@ -401,6 +407,7 @@ workflows:
               only: master
 
       - grcpay-frontend-release:
+          context: semantic-release
           requires:
             - grcpay-frontend-checks
           filters:
@@ -410,6 +417,7 @@ workflows:
   grcpay_deploy-tag:
     jobs:
       - grcpay_build_image:
+          context: git-container-registry
           filters:
             branches:
               ignore: /.*/
@@ -419,12 +427,14 @@ workflows:
   grcpay-frontend_deploy-tag:
     jobs:
       - grcpay-frontend_build_image:
+          context: git-container-registry
           filters:
             branches:
               ignore: /.*/
             tags:
               only: /^grcpay-frontend-v.*/
       - grcpay-frontend_build_image-testnet:
+          context: git-container-registry
           filters:
             branches:
               ignore: /.*/
