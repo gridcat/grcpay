@@ -160,10 +160,10 @@ if [ -d "${WP_PATH}/wp-content/plugins/grcpay-woocommerce" ]; then
     # `woocommerce/cart` and `woocommerce/checkout` blocks. The block-based
     # checkout hides classic payment gateways that haven't declared block
     # compatibility via the block-checkout registration API — and grcpay is
-    # a classic gateway (the forked CryptAPI codebase predates blocks). Result:
-    # the checkout page says "There are no payment methods available" even
-    # though WC()->payment_gateways() server-side reports cryptapi as
-    # available.
+    # a classic gateway (the codebase predates WC blocks). Result: the
+    # checkout page says "There are no payment methods available" even
+    # though WC()->payment_gateways() server-side reports the grcpay
+    # gateway as available.
     #
     # Fix: rewrite the Cart and Checkout page content to use the classic
     # shortcodes, which surface all enabled classic gateways. Long-term the
@@ -179,7 +179,7 @@ if [ -d "${WP_PATH}/wp-content/plugins/grcpay-woocommerce" ]; then
         $WP post update "${CART_ID}" --post_content='[woocommerce_cart]' || true
     fi
 
-    log "configuring cryptapi gateway settings…"
+    log "configuring grcpay gateway settings…"
     GRCPAY_API_URL="${GRCPAY_DEMO_API_URL:-http://grcpay:7001}"
     # The local grc_wallet container runs gridcointestnetd, so the recipient
     # must be a TESTNET address (m/n prefix). We default to the grc_wallet's
@@ -192,7 +192,7 @@ if [ -d "${WP_PATH}/wp-content/plugins/grcpay-woocommerce" ]; then
     # This address is stable across container restarts because it lives in
     # .GridcoinResearch/testnet/wallet.dat (bind-mounted from the host).
     GRCPAY_ADDRESS="${GRCPAY_DEMO_ADDRESS:-n3NA3AwTMEc3Bs6Wrth66armFbmmEfqSj8}"
-    $WP option update woocommerce_cryptapi_settings --format=json "$(cat <<JSON
+    $WP option update woocommerce_grcpay_settings --format=json "$(cat <<JSON
 {
   "enabled": "yes",
   "title": "Gridcoin (GRC)",
