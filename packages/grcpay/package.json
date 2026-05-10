@@ -118,7 +118,7 @@
     "clean": "rimraf ./dist",
     "commit": "git-cz",
     "dev": "npm-run-all -p build:watch start:dev",
-    "rebuild:native": "cd node_modules/better-sqlite3 && npm run install",
+    "rebuild:native": "test -f node_modules/better-sqlite3/build/Release/better_sqlite3.node || (cd node_modules/better-sqlite3 && npm run install)",
     "semantic-release": "semantic-release -e semantic-release-monorepo",
     "start": "node dist/index.js",
     "start:dev": "nodemon dist/index.js",

@@ -24,7 +24,7 @@ jobs:
             - v1-root-deps-{{ checksum "package-lock.json" }}
       - restore_cache:
           keys:
-            - v1-grcpay-deps-{{ checksum "packages/grcpay/package-lock.json" }}
+            - v2-grcpay-deps-{{ checksum "packages/grcpay/package-lock.json" }}
       - restore_cache:
           keys:
             - v1-grcpay-frontend-deps-{{ checksum "packages/grcpay-frontend/package-lock.json" }}
@@ -47,13 +47,15 @@ jobs:
               echo "grcpay deps cache hit — skipping install"
             else
               npm ci
-              # ignore-scripts=true (.npmrc) blocks the better-sqlite3
-              # postinstall that downloads/builds the native binding,
-              # so we invoke it explicitly. The compiled .node file
-              # gets cached alongside node_modules.
-              npm run rebuild:native
               echo "$HASH" > node_modules/.lockfile-hash
             fi
+            # ignore-scripts=true (.npmrc) blocks the better-sqlite3
+            # postinstall that downloads/builds the native binding,
+            # so we invoke it explicitly. Sits outside the cache-hit
+            # gate because a restored node_modules might be from a
+            # build that predates this step (no .node file inside);
+            # the script itself is a no-op if the binding is present.
+            npm run rebuild:native
       - run:
           name: Install grcpay-frontend dependencies
           command: |
@@ -70,7 +72,7 @@ jobs:
           paths:
             - ~/app/node_modules
       - save_cache:
-          key: v1-grcpay-deps-{{ checksum "packages/grcpay/package-lock.json" }}
+          key: v2-grcpay-deps-{{ checksum "packages/grcpay/package-lock.json" }}
           paths:
             - ~/app/packages/grcpay/node_modules
       - save_cache:
