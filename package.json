@@ -11,6 +11,11 @@
   },
   "node": ">=22.0.0",
   "nx": {},
+  "overrides": {
+    "axios": "^1.16.0",
+    "follow-redirects": "^1.16.0",
+    "postcss": "^8.5.14"
+  },
   "packageManager": "npm@10.9.0",
   "private": true,
   "scripts": {
