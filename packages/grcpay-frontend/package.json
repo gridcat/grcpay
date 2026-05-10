@@ -70,6 +70,11 @@
       "git add"
     ]
   },
+  "overrides": {
+    "axios": "^1.16.0",
+    "follow-redirects": "^1.16.0",
+    "postcss": "^8.5.14"
+  },
   "private": true,
   "release": {
     "tagFormat": "grcpay-frontend-v${version}",

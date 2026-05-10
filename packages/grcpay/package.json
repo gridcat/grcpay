@@ -90,6 +90,10 @@
       ".node_persits/**/*"
     ]
   },
+  "overrides": {
+    "axios": "^1.16.0",
+    "follow-redirects": "^1.16.0"
+  },
   "port": 7001,
   "private": true,
   "release": {
