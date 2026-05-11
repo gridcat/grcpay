@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography, Box, Alert } from '@mui/material';
 import Link from 'next/link';
+import { SITE_URL, SITE_HOST } from '@/components/Seo';
 
 export function Overview() {
   return (
@@ -19,9 +20,9 @@ export function Overview() {
           is public. The entire flow can be driven from a half-dozen endpoints.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
-          The API base URL depends on how you deploy. In production at
+          The API base URL depends on how you deploy. On this deployment at
           {' '}
-          <code>grcpay.gridcoin.club</code>
+          <code>{SITE_HOST}</code>
           {' '}
           the API is mounted under
           {' '}
@@ -29,7 +30,7 @@ export function Overview() {
           {' '}
           (so e.g.
           {' '}
-          <code>https://grcpay.gridcoin.club/api/wallets</code>
+          <code>{`${SITE_URL}/api/wallets`}</code>
           ). When running locally with
           {' '}
           <code>docker-compose up grcpay</code>
@@ -44,7 +45,7 @@ export function Overview() {
           {' '}
           the public
           {' '}
-          <code>grcpay.gridcoin.club/api</code>
+          <code>{`${SITE_HOST}/api`}</code>
           {' '}
           install is free for now and provided as-is. No SLA, no warranty
           (see the

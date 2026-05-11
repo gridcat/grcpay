@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { NavMenuMobile } from '@/components/Navigation/NavMenuMobile';
 import { useRouteNavigating } from '@/hooks';
-import { IS_TESTNET } from '@/lib/network';
+import { IS_TESTNET, LOGO_PATH } from '@/lib/network';
 import { NavMenuDesktop } from '../Navigation/NavMenuDesktop';
 
 interface Props {
@@ -76,7 +76,7 @@ export function Header({ showLinks = true }: HeaderProps) {
               }}
             >
                 <Image
-                  src="/ic-logo.svg"
+                  src={LOGO_PATH}
                   width={isMobile && mounted ? 32 : 40}
                   height={isMobile && mounted ? 32 : 40}
                   alt="GRCpay logo"

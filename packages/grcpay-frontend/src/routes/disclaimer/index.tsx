@@ -15,7 +15,7 @@ import { Footer } from '@/components/Footer/Footer';
 import { GradientLine } from '@/components/GradientLine';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
 import { PageWrapper } from '@/components/PageWrapper';
-import { Seo, SITE_NAME } from '@/components/Seo';
+import { Seo, SITE_NAME, SITE_URL, SITE_HOST } from '@/components/Seo';
 import { breadcrumbList } from '@/lib/structuredData';
 import { NextMuiLink } from '@/components/NextMuiLink';
 import { Contents } from './Contents';
@@ -39,7 +39,7 @@ export function Page() {
     <>
       <Seo
         title={`${SITE_NAME} :: Terms of Service`}
-        description="Terms of Service, disclaimer, and acceptable-use policy for GRCpay and the public grcpay.gridcoin.club instance."
+        description={`Terms of Service, disclaimer, and acceptable-use policy for GRCpay and the public ${SITE_HOST} instance.`}
         path="/disclaimer"
         ogType="article"
         jsonLd={{
@@ -69,7 +69,7 @@ export function Page() {
                   The contract, the disclaimer, and the acceptable-use
                   policy for GRCpay and the public
                   {' '}
-                  <code>grcpay.gridcoin.club</code>
+                  <code>{SITE_HOST}</code>
                   {' '}
                   instance. Read it carefully before relying on
                   anything you see here or pointing real customer
@@ -86,16 +86,16 @@ export function Page() {
                   software published at
                   {' '}
                   <NextMuiLink
-                    href="https://github.com/gridcoin-community/grcpay.gridcoin.club"
+                    href="https://github.com/gridcat/grcpay"
                     rel="external noopener"
                     color="primary"
                   >
-                    github.com/gridcoin-community/grcpay.gridcoin.club
+                    github.com/gridcat/grcpay
                   </NextMuiLink>
                   ) and any instance you reach through this site,
                   including the demo at
                   {' '}
-                  <code>grcpay.gridcoin.club</code>
+                  <code>{SITE_HOST}</code>
                   . By using the software, the public instance, the
                   API, the WordPress / WooCommerce plugin, or any
                   other component shipped under the GRCpay name, you
@@ -196,7 +196,7 @@ export function Page() {
                 <Typography gutterBottom variant="body1">
                   We run a public copy of GRCpay at
                   {' '}
-                  <code>https://grcpay.gridcoin.club/api</code>
+                  <code>{`${SITE_URL}/api`}</code>
                   {' '}
                   as a courtesy, so people can try the protocol
                   without standing up their own stack first. The
@@ -211,7 +211,7 @@ export function Page() {
                   <AlertTitle>No SLA, no uptime guarantee, no warranty</AlertTitle>
                   The public
                   {' '}
-                  <code>grcpay.gridcoin.club</code>
+                  <code>{SITE_HOST}</code>
                   {' '}
                   install may go down, change behaviour, lose pending
                   state, or be retired without notice. If you choose

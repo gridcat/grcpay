@@ -1,5 +1,6 @@
 import { Typography, Box } from '@mui/material';
 import React from 'react';
+import { NextMuiLink } from '@/components/NextMuiLink';
 
 export function Settlement() {
   return (
@@ -27,7 +28,7 @@ export function Settlement() {
           surprises, and only converted to GRC for display and for RPC
           calls to the wallet daemon. The full
           {' '}
-          <a href="#refunds">refund flow</a>
+          <NextMuiLink href="#refunds" color="primary">refund flow</NextMuiLink>
           {' '}
           section below has the details on how the refund side works,
           including the dust and sender-not-found edge cases.

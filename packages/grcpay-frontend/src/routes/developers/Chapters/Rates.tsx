@@ -2,6 +2,7 @@ import React from 'react';
 import { Typography, Box } from '@mui/material';
 import { Endpoint } from '@/components/Endpoint/Endpoint';
 import { CodeBlock } from '@/components/CodeBlock/CodeBlock';
+import { SITE_URL } from '@/components/Seo';
 
 export function Rates() {
   return (
@@ -20,14 +21,14 @@ export function Rates() {
         <CodeBlock
           caption="Request"
           language="bash"
-          code="curl https://grcpay.gridcoin.club/api/rates"
+          code={`curl ${SITE_URL}/api/rates`}
         />
 
         <Endpoint method="GET" path="/api/rates/:currency" title="GRC price in fiat" />
         <CodeBlock
           caption="Request"
           language="bash"
-          code="curl https://grcpay.gridcoin.club/api/rates/usd"
+          code={`curl ${SITE_URL}/api/rates/usd`}
         />
         <CodeBlock
           caption="Response — 200 OK"

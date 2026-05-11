@@ -28,11 +28,13 @@ RUN npm ci --omit=dev
 COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/config.json ./config.json
 
-# Create non-root user and ensure the SQLite data directory is writable
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser && \
-    mkdir -p /usr/src/app/data && \
-    chown -R appuser:appgroup /usr/src/app
-USER appuser
+# Run as the official node:* image's built-in `node` user (uid 1000,
+# gid 1000) so a bind-mounted SQLite data dir from a typical host
+# (host user is usually uid 1000 too) is writable without an extra
+# host-side chown. If you run the container with a different host uid,
+# `chown -R 1000:1000 <host-data-dir>` on the host once is enough.
+RUN mkdir -p /usr/src/app/data && chown -R node:node /usr/src/app
+USER node
 
 # Expose default port
 EXPOSE 7001

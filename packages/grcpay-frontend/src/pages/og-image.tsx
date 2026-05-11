@@ -6,12 +6,15 @@ import sharp from 'sharp';
 import { ImageResponse } from 'next/og';
 import type { GetServerSideProps } from 'next';
 import type { ServerResponse } from 'node:http';
+import { IS_TESTNET } from '@/lib/network';
+import { SITE_HOST } from '@/components/Seo';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
 
 const FONT_DIR = path.join(process.cwd(), 'public/fonts/SFUIText');
-const LOGO_PATH = path.join(process.cwd(), 'public/ic-logo.svg');
+const LOGO_FILE = IS_TESTNET ? 'ic-logo-testnet.svg' : 'ic-logo-mainnet.svg';
+const LOGO_PATH = path.join(process.cwd(), 'public', LOGO_FILE);
 
 interface OgAssets {
   fontRegular: ArrayBuffer;
@@ -99,7 +102,7 @@ async function renderImage(): Promise<Buffer> {
             <div style={{ fontSize: 36, fontWeight: 700 }}>Gridcoin Pay</div>
           )}
           <div style={{ fontSize: 22, color: '#cdebe1', fontWeight: 400 }}>
-            grcpay.gridcoin.club
+            {SITE_HOST}
           </div>
         </div>
 

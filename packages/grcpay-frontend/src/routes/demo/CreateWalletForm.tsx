@@ -16,6 +16,7 @@ import {
 import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism';
 import { WalletsRepository } from '@/repositories/WalletsRepository';
 import { WalletEntity } from '@/entities/WalletEntity';
+import { SITE_HOST } from '@/components/Seo';
 
 interface Props {
   onCreated: (wallet: WalletEntity) => void;
@@ -167,7 +168,7 @@ export function CreateWalletForm({ onCreated }: Props) {
             <Typography gutterBottom>
               You&apos;re about to create a payment wallet on the public
               {' '}
-              <code>grcpay.gridcoin.club</code>
+              <code>{SITE_HOST}</code>
               {' '}
               instance with
               {' '}

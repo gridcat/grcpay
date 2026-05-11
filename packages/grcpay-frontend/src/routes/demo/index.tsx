@@ -11,7 +11,7 @@ import { Header } from '@/components/Header/Header';
 import { Footer } from '@/components/Footer/Footer';
 import { GradientLine } from '@/components/GradientLine';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
-import { Seo, SITE_NAME } from '@/components/Seo';
+import { Seo, SITE_NAME, SITE_HOST } from '@/components/Seo';
 import { breadcrumbList } from '@/lib/structuredData';
 import { PageWrapper } from '@/components/PageWrapper';
 import { WalletEntity } from '@/entities/WalletEntity';
@@ -53,7 +53,7 @@ export function Page() {
             <AlertTitle>You&apos;re using the public instance</AlertTitle>
             This page hits the public
             {' '}
-            <code>grcpay.gridcoin.club</code>
+            <code>{SITE_HOST}</code>
             {' '}
             install. It&apos;s free for now, no SLA, no warranty (see the
             {' '}

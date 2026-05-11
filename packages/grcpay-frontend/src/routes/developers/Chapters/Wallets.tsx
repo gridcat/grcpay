@@ -2,6 +2,8 @@ import React from 'react';
 import { Typography, Box } from '@mui/material';
 import { Endpoint } from '@/components/Endpoint/Endpoint';
 import { CodeBlock } from '@/components/CodeBlock/CodeBlock';
+import { NextMuiLink } from '@/components/NextMuiLink';
+import { SITE_URL } from '@/components/Seo';
 
 export function Wallets() {
   return (
@@ -22,7 +24,7 @@ export function Wallets() {
         <CodeBlock
           caption="Request"
           language="bash"
-          code={`curl -X POST https://grcpay.gridcoin.club/api/wallets \\
+          code={`curl -X POST ${SITE_URL}/api/wallets \\
   -H 'Content-Type: application/vnd.api+json' \\
   -d '{
     "data": {
@@ -130,7 +132,7 @@ export function Wallets() {
         <CodeBlock
           caption="Request"
           language="bash"
-          code={`curl https://grcpay.gridcoin.club/api/wallets/SXxxx... \\
+          code={`curl ${SITE_URL}/api/wallets/SXxxx... \\
   -H 'X-Wallet-Token: 8Xf3K2…long-random-base64url-string'`}
         />
         <CodeBlock
@@ -210,7 +212,7 @@ export function Wallets() {
         <CodeBlock
           caption="Request"
           language="bash"
-          code={`curl -X DELETE https://grcpay.gridcoin.club/api/wallets/SXxxx... \\
+          code={`curl -X DELETE ${SITE_URL}/api/wallets/SXxxx... \\
   -H 'X-Wallet-Token: 8Xf3K2…long-random-base64url-string'`}
         />
         <CodeBlock
@@ -375,7 +377,7 @@ export function Wallets() {
               sender couldn&apos;t be determined, or the refund tx
               itself failed to broadcast. See the
               {' '}
-              <a href="#errors">Errors</a>
+              <NextMuiLink href="#errors" color="primary">Errors</NextMuiLink>
               {' '}
               and fee/refund math sections for the full breakdown.
             </Typography>

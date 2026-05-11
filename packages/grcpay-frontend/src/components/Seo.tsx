@@ -1,7 +1,10 @@
 import Head from 'next/head';
-import { IS_TESTNET } from '@/lib/network';
+import { IS_TESTNET, LOGO_PATH } from '@/lib/network';
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://grcpay.gridcoin.club';
+// Bare hostname (no scheme) — for prose like `<code>grcpay.gridcoin.club</code>`
+// references that should track whichever build the user is on.
+export const SITE_HOST = SITE_URL.replace(/^https?:\/\//, '');
 export const SITE_NAME = 'Gridcoin Pay';
 
 interface SeoProps {
@@ -56,7 +59,7 @@ export function Seo({
         key="icon-svg"
         rel="icon"
         type="image/svg+xml"
-        href="/ic-logo.svg"
+        href={LOGO_PATH}
       />
       <link
         key="icon"

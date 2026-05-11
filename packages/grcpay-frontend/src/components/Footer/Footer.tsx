@@ -11,7 +11,7 @@ import { styled } from '@mui/material/styles';
 import { linkRel } from '@/lib/externalRel';
 import { IS_TESTNET, SISTER_NETWORK_LABEL, SISTER_NETWORK_URL } from '@/lib/network';
 
-const GITHUB_REPO_URL = 'https://github.com/gridcoin-community/grcpay.gridcoin.club';
+const GITHUB_REPO_URL = 'https://github.com/gridcat/grcpay';
 
 const SubFooterTypography = styled(Typography)(({ theme }) => ({
   textAlign: 'left',

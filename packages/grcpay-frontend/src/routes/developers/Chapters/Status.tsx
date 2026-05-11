@@ -2,6 +2,7 @@ import React from 'react';
 import { Typography, Box } from '@mui/material';
 import { Endpoint } from '@/components/Endpoint/Endpoint';
 import { CodeBlock } from '@/components/CodeBlock/CodeBlock';
+import { SITE_URL } from '@/components/Seo';
 
 export function Status() {
   return (
@@ -17,7 +18,7 @@ export function Status() {
         <CodeBlock
           caption="Request"
           language="bash"
-          code="curl https://grcpay.gridcoin.club/api/status"
+          code={`curl ${SITE_URL}/api/status`}
         />
         <CodeBlock
           caption="Response — 200 OK"

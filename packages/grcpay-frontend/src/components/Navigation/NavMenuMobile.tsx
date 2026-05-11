@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { styled } from '@mui/material/styles';
 import { useRouteNavigating } from '@/hooks';
+import { LOGO_PATH } from '@/lib/network';
 import {
   menuItems,
   isMenuGroup,
@@ -129,7 +130,7 @@ export function NavMenuMobile() {
         <SubMenuContainer>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Image
-              src="/ic-logo.svg"
+              src={LOGO_PATH}
               width={32}
               height={32}
               alt="GRCpay logo"

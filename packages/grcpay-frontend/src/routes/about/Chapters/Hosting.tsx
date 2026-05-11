@@ -7,6 +7,7 @@ import {
 
 import React from 'react';
 import { NextMuiLink } from '@/components/NextMuiLink';
+import { SITE_URL } from '@/components/Seo';
 
 export function Hosting() {
   return (
@@ -58,7 +59,7 @@ export function Hosting() {
         <Typography gutterBottom variant="body1" component="p">
           We also run a public copy at
           {' '}
-          <code>https://grcpay.gridcoin.club/api</code>
+          <code>{`${SITE_URL}/api`}</code>
           {' '}
           that anyone can point their plugin or integration at. It&apos;s a
           fast way to try the protocol without standing up your own stack

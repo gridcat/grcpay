@@ -6,6 +6,10 @@ export const NETWORK: Network = RAW === 'testnet' ? 'testnet' : 'mainnet';
 
 export const IS_TESTNET = NETWORK === 'testnet';
 
+// Per-network logo / favicon path. Same artwork, gradient stops swapped to
+// the testnet orange palette so the browser tab and in-app logo match.
+export const LOGO_PATH = IS_TESTNET ? '/ic-logo-testnet.svg' : '/ic-logo-mainnet.svg';
+
 // URL of the *other* network's deployment, supplied by env at deploy
 // time. Empty string means "not configured" — the footer cross-link
 // hides itself rather than guessing a domain.

@@ -2,6 +2,7 @@ import React from 'react';
 import { Typography, Box } from '@mui/material';
 import { Endpoint } from '@/components/Endpoint/Endpoint';
 import { CodeBlock } from '@/components/CodeBlock/CodeBlock';
+import { SITE_URL } from '@/components/Seo';
 
 export function Qr() {
   return (
@@ -34,7 +35,7 @@ export function Qr() {
         <CodeBlock
           caption="Request"
           language="bash"
-          code="curl https://grcpay.gridcoin.club/api/wallets/SXxxx.../qr?filter[width]=256"
+          code={`curl ${SITE_URL}/api/wallets/SXxxx.../qr?filter[width]=256`}
         />
         <CodeBlock
           caption="Response — 200 OK"
@@ -53,7 +54,7 @@ export function Qr() {
           caption="Browser usage"
           language="javascript"
           code={`const res = await fetch(
-  'https://grcpay.gridcoin.club/api/wallets/SXxxx.../qr',
+  '${SITE_URL}/api/wallets/SXxxx.../qr',
 );
 const json = await res.json();
 imgEl.src = json.data.attributes.qr;`}

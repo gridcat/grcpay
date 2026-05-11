@@ -1,4 +1,5 @@
 import { SITE_NAME, SITE_URL } from '@/components/Seo';
+import { LOGO_PATH } from '@/lib/network';
 
 export const ORG_ID = `${SITE_URL}/#org`;
 
@@ -7,7 +8,7 @@ export const PUBLISHER_ORG = {
   '@id': ORG_ID,
   name: SITE_NAME,
   url: SITE_URL,
-  logo: { '@type': 'ImageObject', url: `${SITE_URL}/ic-logo.svg` },
+  logo: { '@type': 'ImageObject', url: `${SITE_URL}${LOGO_PATH}` },
 };
 
 export const AUTHOR_GRIDCAT = {
