@@ -1,3 +1,11 @@
+# [grcpay-frontend-v1.0.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.0.0...grcpay-frontend-v1.0.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* a lot of bugfixes ([b26d7de](https://github.com/gridcat/grcpay/commit/b26d7de335522d5161702eb96247c81753c33197))
+* fix deps ([6630532](https://github.com/gridcat/grcpay/commit/66305320700a1dacd6af95133693aa85cf59f6c3))
+
 # grcpay-frontend-v1.0.0 (2026-05-10)
 
 
