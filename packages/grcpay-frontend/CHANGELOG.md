@@ -1,3 +1,10 @@
+# [grcpay-frontend-v1.0.2](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.0.1...grcpay-frontend-v1.0.2) (2026-05-12)
+
+
+### Bug Fixes
+
+* change the texts ([7da8348](https://github.com/gridcat/grcpay/commit/7da8348863bd0a48e2ed61a304143746739f8ee8))
+
 # [grcpay-frontend-v1.0.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.0.0...grcpay-frontend-v1.0.1) (2026-05-11)
 
 
