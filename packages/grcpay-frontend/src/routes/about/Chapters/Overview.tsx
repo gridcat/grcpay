@@ -13,15 +13,15 @@ export function Overview() {
           {' '}
           is a self-hosted checkout facilitator for the Gridcoin network. For each
           customer order it asks the wallet daemon to mint a one-shot Gridcoin
-          address, polls the daemon every few seconds to see how much has been
-          received at it, and once the requested amount has arrived it forwards
-          the payment to the merchant&apos;s wallet. No accounts, no custodial
+          address, polls the daemon every few seconds to see how much has landed
+          there, and once the requested amount has arrived it forwards the
+          payment to the merchant&apos;s wallet. No accounts, no custodial
           storage, no middlemen. It&apos;s a transparent on-chain settlement
-          layer any merchant can run alongside their existing checkout.
+          layer any merchant can run next to their existing checkout.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           The whole flow is built around a small REST API. Drop it in next to your
-          ecommerce backend and you can accept Gridcoin payments in minutes; pair
+          ecommerce backend and you can accept Gridcoin payments in minutes. Pair
           it with one of the upcoming plugins (
           <b>WooCommerce</b>
           {' '}

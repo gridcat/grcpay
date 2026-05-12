@@ -31,7 +31,7 @@ export function Overview() {
           (so e.g.
           {' '}
           <code>{`${SITE_URL}/api/wallets`}</code>
-          ). When running locally with
+          ). Running locally with
           {' '}
           <code>docker-compose up grcpay</code>
           {' '}

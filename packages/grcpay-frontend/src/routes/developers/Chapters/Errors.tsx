@@ -112,7 +112,7 @@ export function Errors() {
               <code>new</code>
               {' '}
               state. Cancellation is only valid on a wallet nobody has
-              paid into yet; once it&apos;s
+              paid into yet. Once it&apos;s
               {' '}
               <code>funded</code>
               {' '}

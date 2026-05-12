@@ -131,10 +131,10 @@ export function Page() {
                   ledger maintained by independent nodes worldwide. Once a
                   transaction has been confirmed by the network, nobody
                   (including the operators of this service) can rewrite,
-                  redact, or reverse it. Refunds, when they
-                  happen, are best-effort outbound transactions to the
-                  apparent sender; they are not chargebacks and they are
-                  not guaranteed.
+                  redact, or reverse it. Refunds, when they happen, are
+                  best-effort outbound transactions to the apparent
+                  sender. They are not chargebacks and they are not
+                  guaranteed.
                 </Typography>
               </Box>
 
@@ -203,7 +203,7 @@ export function Page() {
                   {' '}
                   <NextMuiLink href="/demo" color="primary">live demo</NextMuiLink>
                   {' '}
-                  on this site uses that same instance, and the
+                  on this site uses the same instance, and the
                   WordPress / WooCommerce plugin lets developers point
                   it at the public instance during evaluation.
                 </Typography>
@@ -260,11 +260,11 @@ export function Page() {
                   scope above, is currently
                   {' '}
                   <strong>free of charge</strong>
-                  . If load gets heavy enough that it becomes a
-                  problem for the ecosystem, we may revisit this — for
-                  example by tightening rate limits, adding a paid
-                  tier, or moving to an allowlist. Self-hosters are
-                  unaffected by any of that.
+                  . If load gets heavy enough that it becomes a problem
+                  for the ecosystem, we may revisit this, for example
+                  by tightening rate limits, adding a paid tier, or
+                  moving to an allowlist. Self-hosters are unaffected
+                  by any of that.
                 </Alert>
               </Box>
 
@@ -443,10 +443,10 @@ export function Page() {
                   Your own legal obligations
                 </Typography>
                 <Typography gutterBottom variant="body1">
-                  GRCpay is a tool. Running it commercially — whether
+                  GRCpay is a tool. Running it commercially (whether
                   on the public instance during evaluation, on your
                   own self-hosted instance in production, or anywhere
-                  in between — may bring obligations under the laws
+                  in between) may bring obligations under the laws
                   applicable to you. Those obligations sit with you.
                   GRCpay does not perform any of the following on your
                   behalf:

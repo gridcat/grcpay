@@ -99,7 +99,7 @@ export function Wallets() {
           {' '}
           <b>halford strings</b>
           , not GRC floats: 1 GRC = 100,000,000 halford. Use string
-          arithmetic (or a BigInt in your language of choice) to avoid
+          arithmetic (or a BigInt in your language of choice) to dodge
           rounding surprises. Convert to GRC only at the display layer.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
@@ -175,7 +175,7 @@ export function Wallets() {
           and address not found all look the same to the caller. An
           attacker without a token can&apos;t distinguish &quot;this
           address doesn&apos;t exist&quot; from &quot;this address
-          exists but I don&apos;t have its token&quot;, so the endpoint
+          exists but I don&apos;t have its token,&quot; so the endpoint
           can&apos;t be used as a probe oracle to enumerate live
           addresses.
         </Typography>
@@ -308,8 +308,8 @@ export function Wallets() {
           switch to a reassuring &quot;payment detected, waiting for
           confirmations&quot; banner. Without this state, customers
           sitting on the thank-you page during a slow 2-block wait have
-          no signal that their transaction was seen, and panic-send a
-          second payment.
+          no signal that their transaction was seen, and they
+          panic-send a second payment.
         </Typography>
         <CodeBlock
           caption="Response — 200 OK (confirming, full amount seen on-chain)"

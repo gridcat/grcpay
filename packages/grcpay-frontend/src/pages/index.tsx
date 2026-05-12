@@ -31,19 +31,19 @@ export const getServerSideProps = withThemeDataServerSide(
 const faqs: FaqEntry[] = [
   {
     question: 'What is GRCpay?',
-    answer: 'GRCpay is a self-hosted, non-custodial Gridcoin payment processor for merchants. It mints a fresh Gridcoin address for every order, watches the blockchain for incoming funds, and forwards the payment directly to the merchant’s wallet. There is no custodian and no middleman.',
+    answer: 'GRCpay is a self-hosted, non-custodial Gridcoin payment processor for merchants. It mints a fresh Gridcoin address for every order, watches the blockchain for incoming funds, and forwards the payment to the merchant’s wallet. No custodian sits in the middle.',
   },
   {
     question: 'How do I accept Gridcoin payments on my site?',
-    answer: 'Run GRCpay alongside a Gridcoin wallet daemon and call POST /wallets from your checkout with the amount you expect. GRCpay returns a fresh address and QR code; the customer pays it directly. When the funds arrive on chain, GRCpay forwards them to your merchant wallet and the order is marked processed.',
+    answer: 'Run GRCpay next to a Gridcoin wallet daemon and call POST /wallets from your checkout with the amount you expect. GRCpay returns a fresh address and QR code, the customer pays it directly, and once the funds confirm on chain GRCpay forwards them to your merchant wallet and marks the order processed.',
   },
   {
     question: 'Is GRCpay custodial?',
-    answer: 'No. Funds flow directly from buyer to merchant on the Gridcoin blockchain. GRCpay only orchestrates address minting, lifecycle tracking, and forwarding — it never holds customer funds in a pooled account.',
+    answer: 'No. Funds flow directly from buyer to merchant on the Gridcoin blockchain. GRCpay only handles address minting, lifecycle tracking, and forwarding. It never holds customer funds in a pooled account.',
   },
   {
     question: 'Does GRCpay support WooCommerce?',
-    answer: 'A WooCommerce plugin is in beta testing. It adds a Gridcoin payment method to any WordPress store — customers see a QR code at checkout, merchants receive funds directly at their own wallet. Public release coming soon.',
+    answer: 'A WooCommerce plugin is in beta testing. It adds a Gridcoin payment method to any WordPress store: customers see a QR code at checkout, merchants receive funds at their own wallet. Public release is coming soon.',
   },
   {
     question: 'Can I self-host GRCpay?',
@@ -51,14 +51,14 @@ const faqs: FaqEntry[] = [
   },
   {
     question: 'What happens if a customer underpays or pays after the order expires?',
-    answer: 'If a wallet expires with funds still on it, GRCpay walks the transaction history with listtransactions / getrawtransaction and refunds the sender automatically. If it cannot determine a sender, the wallet is moved to an error status for manual review.',
+    answer: 'If a wallet expires with funds still on it, GRCpay walks the transaction history with listtransactions / getrawtransaction and refunds the sender automatically. If it can’t figure out a sender, the wallet is parked in an error state for manual review.',
   },
 ];
 
 const features: { title: string; body: string; href: string; cta: string }[] = [
   {
     title: 'How it works',
-    body: 'The protocol, the wallet lifecycle, and how refunds work when an order expires unpaid.',
+    body: 'The protocol, the wallet lifecycle, and what happens to refunds when an order expires unpaid.',
     href: '/about',
     cta: 'Learn more →',
   },
@@ -80,8 +80,8 @@ export default function Home() {
   return (
     <>
       <Seo
-        title={`${SITE_NAME} — Gridcoin payment processor for merchants`}
-        description="Accept Gridcoin payments in any checkout. GRCpay is a self-hosted, non-custodial Gridcoin payment processor for merchants — mints a fresh wallet per order, watches the chain, and forwards funds directly to your wallet."
+        title={`${SITE_NAME}: Gridcoin payment processor for merchants`}
+        description="Accept Gridcoin payments in any checkout. GRCpay is a self-hosted, non-custodial Gridcoin payment processor for merchants. It mints a fresh wallet per order, watches the chain, and forwards funds to your wallet."
         path="/"
         jsonLd={{
           '@context': 'https://schema.org',
@@ -104,7 +104,7 @@ export default function Home() {
               applicationSubCategory: 'PaymentGateway',
               operatingSystem: 'Linux, macOS, Windows (Docker)',
               url: SITE_URL,
-              description: 'Self-hosted, non-custodial Gridcoin payment processor for merchants. Accepts Gridcoin (GRC) payments at checkout — mints a fresh address per order, watches the blockchain, forwards funds to the merchant.',
+              description: 'Self-hosted, non-custodial Gridcoin payment processor for merchants. Accepts Gridcoin (GRC) payments at checkout. Mints a fresh address per order, watches the blockchain, forwards funds to the merchant.',
               offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
               author: AUTHOR_GRIDCAT,
               publisher: { '@id': ORG_ID },

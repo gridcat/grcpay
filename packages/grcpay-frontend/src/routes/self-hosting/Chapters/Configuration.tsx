@@ -49,7 +49,7 @@ const envVars: EnvVar[] = [
     name: 'GRC_RPC_USER',
     required: false,
     description:
-      "RPC username. Must match rpcuser in the wallet's gridcoinresearch.conf. Optional but strongly recommended — GRCpay will start without it for dev convenience, but the wallet will refuse RPC calls without matching credentials.",
+      "RPC username. Must match rpcuser in the wallet's gridcoinresearch.conf. Optional but strongly recommended: GRCpay will start without it for dev convenience, but the wallet will refuse RPC calls without matching credentials.",
   },
   {
     name: 'GRC_RPC_PASSWORD',
@@ -76,14 +76,14 @@ const envVars: EnvVar[] = [
     required: false,
     default: '604800',
     description:
-      'How long after a wallet reaches a terminal state (processed / refunded / norefund) GRCpay still watches it for late-arriving customer payments, in seconds. Inside the window, any GRC that trickles in from a stale checkout page or a saved address is detected and refunded to the sender automatically. Outside it, funds sent to a stale address stay in the hot wallet for manual sweep. Default 7 days — past which every reasonable browser cache or checkout session is assumed gone.',
+      'How long after a wallet reaches a terminal state (processed / refunded / norefund) GRCpay still watches it for late-arriving customer payments, in seconds. Inside the window, any GRC that trickles in from a stale checkout page or a saved address is detected and refunded to the sender automatically. Outside it, funds sent to a stale address stay in the hot wallet for manual sweep. Default 7 days, past which every reasonable browser cache or checkout session is assumed gone.',
   },
   {
     name: 'LATE_PAYMENT_CHECK_INTERVAL',
     required: false,
     default: '3600',
     description:
-      'How often the late-payment sweep runs, in seconds. Deliberately separate from (and much slower than) JOBS_INTERVAL because late payments are an edge-case rescue path, not a latency-sensitive flow. Default once an hour. Set to 0 to disable the sweep entirely — useful if you don\'t want GRCpay auto-touching terminal wallets at all and prefer to sweep the hot wallet manually.',
+      "How often the late-payment sweep runs, in seconds. Deliberately separate from (and much slower than) JOBS_INTERVAL because late payments are an edge-case rescue path, not a latency-sensitive flow. Default once an hour. Set to 0 to disable the sweep entirely, which is useful if you don't want GRCpay auto-touching terminal wallets at all and prefer to sweep the hot wallet manually.",
   },
   {
     name: 'MAX_REFUND_ATTEMPTS',
@@ -97,14 +97,14 @@ const envVars: EnvVar[] = [
     required: false,
     default: '30',
     description:
-      'Exponential backoff base for refund retries, in seconds. After failure N the next attempt is gated by base * 2^(N-1) — so with the default 30s the intervals are 30s, 1m, 2m, 4m, spanning ~7.5 minutes before MAX_REFUND_ATTEMPTS trips. The window exists so a real human operator has time to unlock a locked wallet (the usual root cause of a refund RPC failure) before GRCpay declares the refund hopeless.',
+      'Exponential backoff base for refund retries, in seconds. After failure N the next attempt is gated by base * 2^(N-1), so with the default 30s the intervals are 30s, 1m, 2m, 4m, spanning ~7.5 minutes before MAX_REFUND_ATTEMPTS trips. The window exists so a real human operator has time to unlock a locked wallet (the usual root cause of a refund RPC failure) before GRCpay declares the refund hopeless.',
   },
   {
     name: 'MIN_CONFIRMATIONS',
     required: false,
     default: '2',
     description:
-      'Minimum number of block confirmations a received tx must have before it counts toward a wallet\'s settled balance. The balance updater queries the daemon at both MIN_CONFIRMATIONS and 0-conf on every tick — the confirmed portion lands in amountRecieved and gates the new → funded flip, while the unconfirmed delta is reported separately as amountPending so integrators can surface a "waiting for N confirmations" state. Default 2 matches standard e-commerce hardening against same-block reorgs. Lower to 1 on private or trusted chains; set to 0 to accept 0-conf payments (faster but unsafe against reorgs).',
+      "Minimum number of block confirmations a received tx must have before it counts toward a wallet's settled balance. The balance updater queries the daemon at both MIN_CONFIRMATIONS and 0-conf on every tick: the confirmed portion lands in amountRecieved and gates the new → funded flip, while the unconfirmed delta is reported separately as amountPending so integrators can surface a \"waiting for N confirmations\" state. Default 2 matches standard e-commerce hardening against same-block reorgs. Lower to 1 on private or trusted chains; set to 0 to accept 0-conf payments (faster but unsafe against reorgs).",
   },
   {
     name: 'RATE_LIMIT_WALLET_CREATE_PER_MIN',
@@ -125,7 +125,7 @@ const envVars: EnvVar[] = [
     required: false,
     default: '10',
     description:
-      'Per-IP rate limit on DELETE /wallets/:address (merchant-initiated cancellation), in requests per minute. Same envelope as creation — rarely used in normal operation, tight by default to blunt abuse.',
+      'Per-IP rate limit on DELETE /wallets/:address (merchant-initiated cancellation), in requests per minute. Same envelope as creation: rarely used in normal operation, tight by default to blunt abuse.',
   },
   {
     name: 'RATE_LIMIT_QR_PER_MIN',
@@ -146,14 +146,14 @@ const envVars: EnvVar[] = [
     required: false,
     default: '5',
     description:
-      'Circuit breaker failure threshold for the Gridcoin RPC client. After this many consecutive failures (timeouts or errors), the breaker opens and fast-fails every subsequent RPC call without touching the wallet daemon for RPC_BREAKER_COOLDOWN_MS. One probe call goes through after the cooldown; success closes the breaker, failure reopens it with a fresh cooldown. Set to 0 to disable the breaker entirely — useful for dev or when troubleshooting an unrelated issue. The per-call 30s timeout still applies regardless.',
+      'Circuit breaker failure threshold for the Gridcoin RPC client. After this many consecutive failures (timeouts or errors), the breaker opens and fast-fails every subsequent RPC call without touching the wallet daemon for RPC_BREAKER_COOLDOWN_MS. One probe call goes through after the cooldown; success closes the breaker, failure reopens it with a fresh cooldown. Set to 0 to disable the breaker entirely, which is useful for dev or when troubleshooting an unrelated issue. The per-call 30s timeout still applies regardless.',
   },
   {
     name: 'RPC_BREAKER_COOLDOWN_MS',
     required: false,
     default: '30000',
     description:
-      'How long (in milliseconds) the RPC breaker stays open before it lets a probe call through. Matches the per-call RPC timeout budget by default: five failed 30s calls already cost the job loop 2.5 minutes, so the breaker blocks further requests for at least one more cycle before we retry. Raise this if your wallet daemon takes longer to recover from the kind of failure you\'re seeing; lower it only in dev.',
+      "How long (in milliseconds) the RPC breaker stays open before it lets a probe call through. Matches the per-call RPC timeout budget by default: five failed 30s calls already cost the job loop 2.5 minutes, so the breaker blocks further requests for at least one more cycle before we retry. Raise this if your wallet daemon takes longer to recover from the kind of failure you're seeing; lower it only in dev.",
   },
   {
     name: 'TRUST_PROXY_HOPS',

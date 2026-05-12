@@ -132,7 +132,7 @@ export function FullStack() {
 GRC_RPC_PASSWORD=I9nFmrZIVpB5nJz797fFdxLen35jjbpr`}
         />
         <Alert severity="warning" variant="outlined" sx={{ my: 2 }}>
-          Generate your own random values for these — don&apos;t reuse the
+          Generate your own random values for these. Don&apos;t reuse the
           ones in this snippet. Anything 32 characters or longer from
           {' '}
           <code>{'/dev/urandom'}</code>

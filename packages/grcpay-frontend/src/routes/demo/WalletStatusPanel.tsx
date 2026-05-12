@@ -195,7 +195,7 @@ export function WalletStatusPanel({ initialWallet, onReset }: Props) {
             }}
           >
             <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-              Payment detected — waiting for confirmations
+              Payment detected, waiting for confirmations
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Your full payment has arrived at the network level. GRCpay is

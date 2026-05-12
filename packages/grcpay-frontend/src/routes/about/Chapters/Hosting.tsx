@@ -41,7 +41,7 @@ export function Hosting() {
           field on every order to your real (cold) wallet, and let
           GRCpay forward funds onward as soon as a payment arrives. That
           way the wallet GRCpay can actually touch only ever holds a few
-          minutes of in-transit balance — if the host is ever
+          minutes of in-transit balance. If the host is ever
           compromised, the blast radius is &ldquo;maybe one
           order&rdquo; instead of &ldquo;every GRC you&apos;ve ever
           earned.&rdquo; The
@@ -69,8 +69,7 @@ export function Hosting() {
           The public install is provided as a courtesy with
           {' '}
           <b>no SLA, no uptime guarantee, and no warranty</b>
-          {' '}
-          — see the
+          . See the
           {' '}
           <NextMuiLink href="/disclaimer#public-instance" color="primary">
             disclaimer

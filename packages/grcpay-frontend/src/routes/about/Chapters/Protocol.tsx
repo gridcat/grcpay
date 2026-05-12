@@ -16,7 +16,7 @@ const states: { name: string; description: string }[] = [
   {
     name: 'confirming',
     description:
-      'The customer has deposited enough GRC to cover the invoice when counting the confirmed balance AND the 0-conf pending balance, but the confirmed portion hasn\'t yet reached MIN_CONFIRMATIONS blocks. This is the right state to render a "payment detected — waiting for confirmations" banner to the customer so they don\'t re-send. Transitions forward to funded when the confirmed balance actually meets the invoice, or backward to new if a pending tx drops out of the mempool (reorg, low-fee replacement).',
+      'The customer has deposited enough GRC to cover the invoice when counting the confirmed balance AND the 0-conf pending balance, but the confirmed portion hasn\'t yet reached MIN_CONFIRMATIONS blocks. This is the right state to render a "payment detected, waiting for confirmations" banner to the customer so they don\'t re-send. Transitions forward to funded when the confirmed balance actually meets the invoice, or backward to new if a pending tx drops out of the mempool (reorg, low-fee replacement).',
   },
   {
     name: 'funded',
@@ -26,7 +26,7 @@ const states: { name: string; description: string }[] = [
   {
     name: 'processed',
     description:
-      'Payment has been forwarded to the recipient (or marked complete if no recipient was given). This is the success terminal state. If an overpayment was refunded along the way, the refund txid is in the wallet record\'s refundTx field and the amount in refundAmount.',
+      "Payment has been forwarded to the recipient (or marked complete if no recipient was given). This is the success terminal state. If an overpayment was refunded along the way, the refund txid is in the wallet record's refundTx field and the amount in refundAmount.",
   },
   {
     name: 'expired',
@@ -41,7 +41,7 @@ const states: { name: string; description: string }[] = [
   {
     name: 'norefund',
     description:
-      'Wallet expired with no balance to return — terminal state, nothing further to do.',
+      'Wallet expired with no balance to return. Terminal state, nothing further to do.',
   },
   {
     name: 'error',

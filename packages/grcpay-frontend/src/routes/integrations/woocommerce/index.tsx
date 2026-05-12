@@ -55,8 +55,8 @@ export function Page() {
           <Typography gutterBottom variant="body1" component="p" sx={{ pb: 2 }}>
             The GRCpay WooCommerce plugin adds a Gridcoin payment method to any
             WordPress store running WooCommerce. Customers see a QR code at
-            checkout, you receive funds at your wallet. No middleman, no
-            custodial risk.
+            checkout, and you receive funds at your own wallet. No middleman,
+            no custodial risk.
           </Typography>
           <Install />
           <Configure />

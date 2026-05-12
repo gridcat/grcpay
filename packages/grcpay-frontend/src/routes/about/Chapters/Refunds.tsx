@@ -13,7 +13,7 @@ export function Refunds() {
           situations, each with slightly different semantics. In all of
           them, the refund side is best-effort: GRCpay tries hard to do
           the right thing, and when it genuinely can&apos;t (sender
-          unknown, dust amount, RPC error), it degrades gracefully
+          unknown, dust amount, RPC error) it degrades gracefully
           rather than parking the wallet in limbo.
         </Typography>
 
@@ -23,24 +23,24 @@ export function Refunds() {
         <Typography gutterBottom variant="body1" component="p">
           When a customer sends
           <i> more </i>
-          GRC than the wallet&apos;s required amount — a typo, a stale
+          GRC than the wallet&apos;s required amount (a typo, a stale
           fiat→GRC conversion, or an off-by-one somewhere in their
-          checkout — GRCpay detects the overpayment at settlement time
+          checkout) GRCpay detects the overpayment at settlement time
           and refunds the excess to the sender before forwarding the
           required amount to the merchant.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           The refund goes to the
           <i> latest </i>
-          contributor — the account whose payment pushed the wallet
+          contributor, the account whose payment pushed the wallet
           over the required amount. This is almost always the customer
           who caused the overpayment in the first place. Their net cost
           ends up being
           {' '}
           <code>required + MIN_FEE</code>
           {' '}
-          (they pay for the refund tx themselves, which feels fair —
-          the merchant shouldn&apos;t be penalised for their typo).
+          (they pay for the refund tx themselves, which feels fair: the
+          merchant shouldn&apos;t be penalised for their typo).
           The merchant gets exactly
           {' '}
           <code>required - MIN_FEE</code>
@@ -84,8 +84,8 @@ export function Refunds() {
               {' '}
               <code>funded</code>
               {' '}
-              and the failure is retried with exponential backoff —
-              default intervals 30s, 1m, 2m, 4m — across the next few
+              and the failure is retried with exponential backoff
+              (default intervals 30s, 1m, 2m, 4m) across the next few
               job-loop cycles. That window gives a real human operator
               time to actually unlock the daemon (the usual root cause)
               before we declare the refund hopeless. Only after the
@@ -115,9 +115,9 @@ export function Refunds() {
           Expired-wallet refunds
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
-          If a wallet expires with a non-zero balance — the customer
+          If a wallet expires with a non-zero balance (the customer
           paid late, or the order sat open too long without reaching
-          its target — GRCpay walks the full transaction history and
+          its target) GRCpay walks the full transaction history and
           refunds
           <i> each </i>
           contributor the amount they originally sent, minus the
@@ -132,8 +132,7 @@ export function Refunds() {
           <li>
             <Typography variant="body1">
               <code>refunded</code>
-              {' '}
-              — at least one refund went out and none failed. The
+              : at least one refund went out and none failed. The
               wallet record&apos;s
               {' '}
               <code>tx_out</code>
@@ -147,8 +146,7 @@ export function Refunds() {
           <li>
             <Typography variant="body1">
               <code>norefund</code>
-              {' '}
-              — every contribution was below the network fee threshold.
+              : every contribution was below the network fee threshold.
               Refunding any of them would net-negative the wallet, so
               nothing is attempted. Terminal state, operator doesn&apos;t
               need to do anything.
@@ -157,8 +155,7 @@ export function Refunds() {
           <li>
             <Typography variant="body1">
               <code>error</code>
-              {' '}
-              — either no senders could be identified at all, or at
+              : either no senders could be identified at all, or at
               least one refund RPC call threw. Any refunds that
               <i> did </i>
               succeed are still recorded, but the wallet is parked for
@@ -177,7 +174,7 @@ export function Refunds() {
           <i> already </i>
           settled? Picture a shopper who opens a checkout page, walks
           away for an hour, and eventually clicks &ldquo;pay&rdquo; on a
-          stale tab — by which point the order has either been
+          stale tab. By that point the order has either been
           completed by someone else, expired, or been cancelled by the
           merchant. Without special handling, that GRC would sit
           silently in GRCpay&apos;s hot wallet and the customer would
@@ -189,7 +186,7 @@ export function Refunds() {
           {' '}
           <code>LATE_PAYMENT_CHECK_INTERVAL</code>
           {' '}
-          env var — set it to
+          env var; set it to
           {' '}
           <code>0</code>
           {' '}
@@ -203,7 +200,7 @@ export function Refunds() {
           <code>LATE_PAYMENT_WINDOW</code>
           , also env-tunable), it asks the daemon for the current
           balance, compares it against the last amount GRCpay recorded,
-          and refunds the difference to the latest sender — minus the
+          and refunds the difference to the latest sender, minus the
           per-tx fee, same economics as the overpayment flow.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">

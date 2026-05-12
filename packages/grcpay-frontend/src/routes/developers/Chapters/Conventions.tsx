@@ -77,7 +77,7 @@ export function Conventions() {
           {' '}
           <code>404</code>
           , because GRCpay intentionally doesn&apos;t leak address
-          existence to unauthenticated callers). Stash it alongside
+          existence to unauthenticated callers). Stash it next to
           the address in whatever order record your integration
           keeps.
         </Typography>

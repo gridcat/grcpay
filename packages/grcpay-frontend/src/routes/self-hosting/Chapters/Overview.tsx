@@ -20,7 +20,7 @@ export function Overview() {
           payment addresses, and a wallet daemon on the back that stays
           private to your network. The whole footprint is a Node.js
           process and a SQLite file on the GRCpay side, plus whatever
-          your wallet daemon needs.
+          space your wallet daemon needs.
         </Typography>
       </Box>
     </Box>

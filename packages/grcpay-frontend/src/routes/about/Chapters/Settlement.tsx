@@ -15,7 +15,7 @@ export function Settlement() {
           customer paid more than was asked for, refund the excess to
           them; then forward exactly the required amount to the
           merchant&apos;s recipient address (minus the standard Gridcoin
-          network fee — currently 0.001 GRC per transaction). The
+          network fee, currently 0.001 GRC per transaction). The
           merchant always gets exactly what they asked for, not whatever
           happened to land in the wallet. Any overpayment goes back to
           the customer who caused it, which is how honest typos and
@@ -39,10 +39,10 @@ export function Settlement() {
           {' '}
           <code>processed</code>
           {' '}
-          and the funds remain at the address — useful when the merchant
-          prefers to sweep balances manually. Overpayment refunds still
-          happen in this case; only the forward-to-merchant step is
-          skipped.
+          and the funds stay at the address, which is useful when the
+          merchant prefers to sweep balances manually. Overpayment
+          refunds still happen in this case; only the forward-to-merchant
+          step is skipped.
         </Typography>
       </Box>
     </Box>

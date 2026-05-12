@@ -48,7 +48,7 @@ export function HotCold() {
               {' '}
               (or main merchant wallet) is where the money actually lives.
               It can be on a different host, an air-gapped machine, or a
-              hardware wallet — whatever your operational comfort allows.
+              hardware wallet, whatever your operational comfort allows.
               GRCpay never has its private keys and never makes RPC calls
               to it.
             </Typography>
@@ -71,7 +71,7 @@ export function HotCold() {
           With a single-wallet setup, that&apos;s every GRC you&apos;ve
           ever earned. With the hot/cold split, the attacker drains the
           hot wallet and walks away with only whatever happened to be
-          mid-settlement at that moment. Typically zero, or a single
+          mid-settlement at that moment, typically zero or a single
           order&apos;s worth of GRC. The blast radius shrinks from
           &ldquo;everything&rdquo; to &ldquo;maybe a few minutes of
           revenue.&rdquo;
@@ -99,7 +99,7 @@ export function HotCold() {
               {' '}
               service
               <i> is </i>
-              the hot wallet — that&apos;s already correct. The thing
+              the hot wallet, so that&apos;s already correct. The thing
               that changes is what you do with the money once it arrives.
             </Typography>
           </li>
@@ -111,7 +111,7 @@ export function HotCold() {
               {' '}
               (the merchant wallet you actually want the money to land
               in). Save it somewhere your checkout integration can read
-              it — a config value, an environment variable, a database
+              it: a config value, an environment variable, a database
               row, whatever fits.
             </Typography>
           </li>
@@ -194,9 +194,9 @@ export function HotCold() {
           forward leg (
           <code>0.001 GRC</code>
           {' '}
-          per transaction by default). A few GRC is plenty for
-          months of operation. Top it up the same way you&apos;d fund
-          any other wallet.
+          per transaction by default). A few GRC is plenty for months
+          of operation. Top it up the same way you would fund any
+          other wallet.
         </Alert>
       </Box>
     </Box>

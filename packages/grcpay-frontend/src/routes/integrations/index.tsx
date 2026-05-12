@@ -28,7 +28,7 @@ const comingSoon: { name: string; description: string }[] = [
   {
     name: 'PrestaShop',
     description:
-      'PrestaShop module mirroring the WooCommerce plugin: install, point at your GRCpay URL, you\u2019re live.',
+      'PrestaShop module mirroring the WooCommerce plugin: install it, point at your GRCpay URL, you\u2019re live.',
   },
 ];
 

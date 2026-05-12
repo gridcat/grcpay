@@ -55,7 +55,7 @@ export function Page() {
             {' '}
             <code>{SITE_HOST}</code>
             {' '}
-            install. It&apos;s free for now, no SLA, no warranty (see the
+            install. It&apos;s free for now: no SLA, no warranty (see the
             {' '}
             <Link href="/disclaimer#public-instance" style={{ color: 'inherit' }}>disclaimer</Link>
             ). For production we strongly recommend

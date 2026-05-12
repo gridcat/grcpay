@@ -54,19 +54,18 @@ export function Page() {
                   Legal overview for self-hosters
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
-                  An orientation pass — not advice — for anyone
-                  running GRCpay against their own Gridcoin wallet to
-                  accept payments commercially. Read it before you
-                  flip your checkout from sandbox to live; talk to a
-                  lawyer in your jurisdiction before you do anything
-                  important.
+                  An orientation pass, not advice, for anyone running
+                  GRCpay against their own Gridcoin wallet to accept
+                  payments commercially. Read it before you flip your
+                  checkout from sandbox to live, and talk to a lawyer
+                  in your jurisdiction before you do anything important.
                 </Typography>
               </Box>
 
               <Alert severity="info" variant="outlined" sx={{ mb: 4 }}>
                 <AlertTitle>This page is not legal advice</AlertTitle>
-                It&apos;s a map. The terrain it describes — crypto
-                payment regulation — is moving, jurisdiction-specific,
+                It&apos;s a map. The terrain it describes (crypto
+                payment regulation) is moving, jurisdiction-specific,
                 and unforgiving when you get it wrong. The page tells
                 you which regimes might engage with what you&apos;re
                 doing; a lawyer in your jurisdiction tells you what to
@@ -91,8 +90,8 @@ export function Page() {
                   UK, Switzerland, Singapore, and the UAE start
                   accepting crypto payments. None of it is exhaustive,
                   some of it will be wrong by the time you read it,
-                  and all of it depends on your specific facts. Use it
-                  as a checklist of things to ask your lawyer about,
+                  and all of it depends on your specific facts. Treat
+                  it as a checklist of things to ask your lawyer about,
                   not as a substitute for asking.
                 </Typography>
               </Box>
@@ -111,9 +110,9 @@ export function Page() {
                   {' '}
                   <strong>operating a service</strong>
                   . Almost every regulator&apos;s test, in practice,
-                  collapses to: are you holding customer funds,
-                  forwarding them to someone, or otherwise standing
-                  between two parties to a payment?
+                  collapses to one question: are you holding customer
+                  funds, forwarding them to someone, or otherwise
+                  standing between two parties to a payment?
                 </Typography>
                 <Typography gutterBottom variant="body1">
                   The GRCpay
@@ -160,8 +159,7 @@ export function Page() {
                     of them, the more your activity looks like
                     custody. Sweeping into cold storage on a fixed
                     cadence and disclosing the wallet structure to
-                    your accountant is the boring-and-defensible
-                    pattern.
+                    your accountant is the boring, defensible pattern.
                   </Typography>
                 </Box>
               </Box>
@@ -359,8 +357,8 @@ export function Page() {
                 </Typography>
                 <Typography gutterBottom variant="body1">
                   GRCpay does not perform any anti-money-laundering
-                  function. It accepts a hash of an order shape, mints
-                  an address, watches for inbound funds, and forwards
+                  function. It accepts an order shape, mints an
+                  address, watches for inbound funds, and forwards
                   them. Whether KYC, sanctions screening, or
                   suspicious-activity monitoring applies to your usage
                   depends entirely on what you&apos;re doing and where
@@ -379,11 +377,11 @@ export function Page() {
                   </Typography>
                   <Typography component="li" variant="body1" gutterBottom>
                     For larger or recurring transactions, consider
-                    name-based KYC at the order layer (not the
-                    payment layer) — i.e., your storefront collects
-                    enough customer information to satisfy the AML
-                    rules that apply to you, independent of what
-                    GRCpay does.
+                    name-based KYC at the order layer rather than the
+                    payment layer: your storefront collects enough
+                    customer information to satisfy the AML rules
+                    that apply to you, independent of what GRCpay
+                    does.
                   </Typography>
                   <Typography component="li" variant="body1" gutterBottom>
                     Keep records: order id, customer info you

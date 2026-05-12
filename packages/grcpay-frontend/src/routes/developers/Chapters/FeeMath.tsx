@@ -63,7 +63,7 @@ const rows: Row[] = [
     forwarded: '(not yet)',
     refundTxField: 'null',
     notes:
-      'Refund RPC threw. Wallet stays funded, refund_attempts bumped, retried on the next cycle with exponential backoff (30s, 1m, 2m, 4m). Merchant payout is held until the refund either succeeds or the retry cap is exhausted. Rationale: don\'t commit to forwarding the merchant\'s cut before we\'ve given the customer\'s refund a real chance.',
+      "Refund RPC threw. Wallet stays funded, refund_attempts bumped, retried on the next cycle with exponential backoff (30s, 1m, 2m, 4m). Merchant payout is held until the refund either succeeds or the retry cap is exhausted. Rationale: don't commit to forwarding the merchant's cut before we've given the customer's refund a real chance.",
   },
   {
     scenario: 'Refund tx fails (retries exhausted)',
@@ -97,8 +97,8 @@ export function FeeMath() {
           <b>GRCpay always pays the per-tx network fee out of the
           amount being sent</b>
           , never on top of it. That applies equally to merchant
-          forwards and to customer refunds. Whoever&apos;s receiving
-          the tx also bears the fee for it.
+          forwards and to customer refunds. Whoever receives the tx
+          also bears the fee for it.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           The network fee is currently
@@ -176,7 +176,7 @@ export function FeeMath() {
           {' '}
           <code>required − fee</code>
           {' '}
-          is when the forward tx itself fails, and in that case the
+          is when the forward tx itself fails; in that case the
           wallet transitions to
           {' '}
           <code>error</code>
@@ -264,12 +264,12 @@ export function FeeMath() {
           {' '}
           <code>amountRecieved</code>
           , and refunds any delta to the latest sender minus the fee.
-          Same dust/no-sender absorption rules as the overpayment
+          Same dust and no-sender absorption rules as the overpayment
           flow. Each successful late refund bumps the wallet&apos;s
           {' '}
           <code>refundAmount</code>
           {' '}
-          cumulatively and lands an
+          cumulatively and lands a
           {' '}
           <code>late_refund</code>
           {' '}

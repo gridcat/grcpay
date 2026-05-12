@@ -13,8 +13,7 @@ export function WhyGrcpay() {
           Bitcoin has
           {' '}
           <NextMuiLink href="https://btcpayserver.org/" color="primary">BTCPay Server</NextMuiLink>
-          {' '}
-          — a self-hosted, non-custodial payment processor you can drop in
+          , a self-hosted, non-custodial payment processor you can drop in
           front of any checkout. Gridcoin doesn&apos;t. Gridcoin isn&apos;t
           on BTCPay&apos;s altcoin support list, and it doesn&apos;t appear
           on the
@@ -23,10 +22,10 @@ export function WhyGrcpay() {
           {' '}
           curated list either. The stock wallet daemon (
           <code>gridcoinresearchd</code>
-          ) is a full node with a JSON-RPC interface, and that&apos;s it —
-          a merchant who wants to accept GRC has to build the rest of the
-          plumbing themselves before a customer can click &ldquo;Pay with
-          GRC&rdquo; in a store. GRCpay
+          ) is a full node with a JSON-RPC interface, and that&apos;s where
+          it stops. A merchant who wants to accept GRC has to build the rest
+          of the plumbing themselves before a customer can click &ldquo;Pay
+          with GRC&rdquo; in a store. GRCpay
           <i> is </i>
           that rest-of-the-plumbing.
         </Typography>
@@ -35,11 +34,11 @@ export function WhyGrcpay() {
           What you have to build on top of the daemon
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
-          The wallet daemon is exactly that — a wallet. It does its job
-          well: managing keys, keeping its view of the chain in sync,
+          The wallet daemon is exactly that: a wallet. It does its job
+          well, managing keys, keeping its view of the chain in sync,
           tracking which addresses belong to it, and sending GRC when
           asked. It also stays cleanly within that remit, and
-          that&apos;s the right design call: running a checkout is a
+          that&apos;s the right design call. Running a checkout is a
           different layer of plumbing, and a wallet daemon
           shouldn&apos;t pretend otherwise.
         </Typography>
@@ -63,11 +62,10 @@ export function WhyGrcpay() {
           sends a transaction. The daemon keeps its internal ledger up to
           date as new blocks come in, and then waits to be asked. Every
           action is initiated by an explicit RPC call from outside, which
-          is exactly what you want from a wallet — predictable, auditable,
+          is exactly what you want from a wallet: predictable, auditable,
           no surprises. The flip side is that anything checkout-shaped
           (orders, expiry, forwarding, customer-facing webhooks) has to
-          live somewhere else. Specifically, the higher layer needs to
-          provide:
+          live somewhere else. The higher layer ends up owning:
         </Typography>
         <Box component="ul" sx={{ pl: 4, mt: 0, mb: 2 }}>
           <li>
@@ -106,7 +104,7 @@ export function WhyGrcpay() {
               <code>expired → refunded / norefund / error</code>
               {' '}
               for orders that age out. Refunds in particular need
-              transaction-history walking — GRCpay calls
+              transaction-history walking. GRCpay calls
               {' '}
               <code>listtransactions</code>
               {' '}
@@ -126,10 +124,10 @@ export function WhyGrcpay() {
             <Typography variant="body1">
               <b>A real HTTP API.</b>
               {' '}
-              The wallet only speaks JSON-RPC over HTTP basic auth — fine
-              for sysadmins, awkward for plugging into a web checkout. No
-              JSON:API conventions, no CORS, no rate limits, no QR
-              endpoint, no audit log.
+              The wallet only speaks JSON-RPC over HTTP basic auth, which
+              is fine for sysadmins and awkward for plugging into a web
+              checkout. No JSON:API conventions, no CORS, no rate limits,
+              no QR endpoint, no audit log.
             </Typography>
           </li>
           <li>
@@ -138,7 +136,7 @@ export function WhyGrcpay() {
               {' '}
               If the merchant wants funds forwarded to a cold wallet, you
               need to fetch the balance, set the fee, and send a
-              transaction — all wrapped in retry logic for transient RPC
+              transaction, all wrapped in retry logic for transient RPC
               errors.
             </Typography>
           </li>
@@ -184,7 +182,7 @@ export function WhyGrcpay() {
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
           It doesn&apos;t bypass any wallet limitations. There&apos;s no
-          magic. It just packages all the plumbing every merchant would
+          magic. It packages all the plumbing every merchant would
           otherwise have to write themselves into one open-source service
           that anyone can run against their own wallet.
         </Typography>
@@ -193,7 +191,7 @@ export function WhyGrcpay() {
           A smaller attack surface
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
-          There&apos;s a subtle but real security win that comes for free
+          There&apos;s a quiet but real security win that comes for free
           with this architecture: putting GRCpay in front of
           {' '}
           <code>gridcoinresearchd</code>
@@ -208,8 +206,7 @@ export function WhyGrcpay() {
           , and
           {' '}
           <code>sendtoaddress</code>
-          {' '}
-          — anyone who reaches the RPC port with the right credentials can
+          . Anyone who reaches the RPC port with the right credentials can
           dump keys or drain the wallet outright.
         </Typography>
         <Typography gutterBottom variant="body1" component="p">
@@ -237,14 +234,14 @@ export function WhyGrcpay() {
             <Typography variant="body1">
               Even if GRCpay&apos;s API is somehow compromised, the
               worst-case impact is the creation of empty payment wallets
-              and the disclosure of already-public wallet state — none of
+              and the disclosure of already-public wallet state. None of
               the high-blast-radius wallet RPCs are reachable through it.
             </Typography>
           </li>
         </Box>
         <Typography gutterBottom variant="body1" component="p">
           This is the same model BTCPay uses for Bitcoin: the wallet stays
-          private, and the payment-processor only speaks the limited
+          private, and the payment processor only speaks the limited
           subset of commands a checkout actually needs.
         </Typography>
 
@@ -256,7 +253,7 @@ export function WhyGrcpay() {
             <Typography variant="body2">
               <code>DEFAULT_KEYPOOL_SIZE = 100</code>
               {' '}
-              and the wallet&apos;s key-management internals —
+              and the wallet&apos;s key-management internals:
               {' '}
               <NextMuiLink
                 href="https://github.com/gridcoin-community/Gridcoin-Research/blob/master/src/wallet/wallet.h"
@@ -294,7 +291,7 @@ export function WhyGrcpay() {
               ,
               {' '}
               <code>getrawtransaction</code>
-              ) —
+              ):
               {' '}
               <NextMuiLink
                 href="https://gridcoin.us/wiki/rpc.html"

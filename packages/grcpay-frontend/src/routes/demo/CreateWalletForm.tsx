@@ -102,7 +102,7 @@ export function CreateWalletForm({ onCreated }: Props) {
         <Typography variant="body2" sx={{ pb: 2, color: 'text.secondary' }}>
           Fill in an amount in GRC and (optionally) a recipient address. The
           backend will mint a fresh Gridcoin address you can send funds to. No
-          real GRC will be charged unless you actually transfer it.
+          real GRC moves unless you actually transfer it.
         </Typography>
         <Stack spacing={2}>
           <TextField
@@ -132,7 +132,7 @@ export function CreateWalletForm({ onCreated }: Props) {
               </AlertTitle>
               You haven&apos;t entered a recipient address. Any GRC you send
               to the wallet that gets minted will land in the
-              public-instance operator&apos;s wallet and will
+              public-instance operator&apos;s wallet, and will
               {' '}
               <strong>not be forwarded or refunded</strong>
               . If you don&apos;t mean to donate, paste an address you
@@ -186,7 +186,7 @@ export function CreateWalletForm({ onCreated }: Props) {
               {' '}
               <strong>will not be refunded</strong>
               . On-chain transactions are final, and without a recipient
-              there&apos;s nowhere for the backend to forward them. In
+              there&apos;s nowhere for the backend to forward them to. In
               effect, this is a donation to the public-instance operator.
             </Typography>
             <Typography>

@@ -20,7 +20,7 @@ export function Privacy() {
           {' '}
           <NextMuiLink href="https://github.com/plausible/analytics" color="primary">Plausible</NextMuiLink>
           {' '}
-          for traffic analytics — no tracking pixels, no marketing cookies, no
+          for traffic analytics. No tracking pixels, no marketing cookies, no
           Google Analytics. The tracking script can be disabled at deploy time via the
           {' '}
           <code>NEXT_PUBLIC_TRACK</code>

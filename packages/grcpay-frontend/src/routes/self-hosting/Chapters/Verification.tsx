@@ -54,14 +54,14 @@ TOKEN=$(echo "$RESP" | jq -r '.data.attributes.token')`}
           You should get back a 201 with a fresh Gridcoin address in
           {' '}
           <code>data.attributes.address</code>
-          . That address came from your wallet&apos;s keypool — it&apos;s
-          yours, not ours. The response also contains a
+          . That address came from your wallet&apos;s keypool, so
+          it&apos;s yours, not ours. The response also contains a
           {' '}
           <code>token</code>
           {' '}
-          field — GRCpay reveals the raw access token exactly once,
+          field. GRCpay reveals the raw access token exactly once,
           right here, and only stores a SHA256 hash server-side. Stash
-          it now because every subsequent read or cancel on this
+          it now, because every subsequent read or cancel on this
           wallet will need it in the
           {' '}
           <code>X-Wallet-Token</code>

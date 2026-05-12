@@ -24,7 +24,7 @@ export function WooCommerceCard() {
         </Box>
         <Typography variant="body2" sx={{ color: 'text.secondary', pt: 1 }}>
           Drop-in WordPress plugin. Adds Gridcoin as a payment method to any
-          WooCommerce checkout. Currently in beta testing — public release
+          WooCommerce checkout. Currently in beta testing; public release
           coming soon.
         </Typography>
       </CardContent>

@@ -72,9 +72,9 @@ export function Page() {
               <Typography gutterBottom variant="body1" component="p" sx={{ pb: 2 }}>
                 GRCpay is built to be run by the merchant who collects the
                 payments. That&apos;s the canonical setup, not a fallback.
-                Two paths are covered: connecting to a Gridcoin wallet you
-                already operate, and standing up the whole stack from
-                scratch with Docker Compose.
+                Two paths are covered below: connecting to a Gridcoin
+                wallet you already operate, and standing up the whole
+                stack from scratch with Docker Compose.
               </Typography>
               <Overview />
               <Prerequisites />

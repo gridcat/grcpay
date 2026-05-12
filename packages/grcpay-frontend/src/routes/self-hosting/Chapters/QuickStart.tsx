@@ -107,8 +107,8 @@ docker run -d \\
           <code>-p 127.0.0.1:7001:7001</code>
           {' '}
           binding keeps GRCpay listening only on localhost. Put a reverse
-          proxy in front of it before exposing it to the internet — see
-          the &ldquo;Reverse proxy&rdquo; section below.
+          proxy in front of it before exposing it to the internet (see
+          the &ldquo;Reverse proxy&rdquo; section below).
         </Alert>
 
         <Typography variant="h6" component="h3" sx={{ pt: 3, pb: 1 }}>

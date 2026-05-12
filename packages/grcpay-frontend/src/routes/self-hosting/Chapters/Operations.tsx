@@ -83,7 +83,7 @@ docker compose logs -f grcpay`}
           <ListItem disableGutters>
             <ListItemText
               primary='"Connecting to the gridcoin wallet…" on loop'
-              secondary="The RPC handshake is failing. Almost always one of: wrong host/port, wrong rpcuser/rpcpassword, or rpcallowip not covering the source address. The wallet logs nothing for rejected connections by default — temporarily set debug=rpc in gridcoinresearch.conf to see why."
+              secondary="The RPC handshake is failing. Almost always one of: wrong host/port, wrong rpcuser/rpcpassword, or rpcallowip not covering the source address. The wallet logs nothing for rejected connections by default; temporarily set debug=rpc in gridcoinresearch.conf to see why."
             />
           </ListItem>
           <ListItem disableGutters>
