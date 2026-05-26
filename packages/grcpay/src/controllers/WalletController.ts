@@ -9,7 +9,6 @@ import { ErrorModel } from '../models/Error';
 import { WalletsCreatorService } from '../services/wallet/walletCreatorService';
 import { WalletCancelService, WalletCancelError } from '../services/wallet/walletCancelService';
 import { WalletsService } from '../services/wallet/walletsService';
-import { WalletStatus } from '../models/Wallet';
 import { config } from '../config';
 
 const { Store } = yayson();
