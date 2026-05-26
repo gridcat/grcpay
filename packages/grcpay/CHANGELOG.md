@@ -1,3 +1,17 @@
+# [grcpay-v1.1.0](https://github.com/gridcat/grcpay/compare/grcpay-v1.0.0...grcpay-v1.1.0) (2026-05-26)
+
+
+### Bug Fixes
+
+* a lot of bugfixes ([b26d7de](https://github.com/gridcat/grcpay/commit/b26d7de335522d5161702eb96247c81753c33197))
+* fix duplicated import ([3dd7b3f](https://github.com/gridcat/grcpay/commit/3dd7b3f68eb1224cc0752712ee7d45dd8e007b6d))
+* fix ts issue ([fe5365e](https://github.com/gridcat/grcpay/commit/fe5365e3fac62fbffc650470daf361d908053216))
+
+
+### Features
+
+* outbound webhooks, crash-safe broadcasts, cancel-with-funds ([7e8d759](https://github.com/gridcat/grcpay/commit/7e8d75966530817f726779aa2be072dd105b761a))
+
 # grcpay-v1.0.0 (2026-05-10)
 
 
