@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import yayson from 'yayson';
 import { Controller } from './BaseController';
 import { WalletPresenter } from '../presenters/wallet.presenter';
-import { Wallet } from '../models/Wallet';
+import { Wallet, WalletStatus } from '../models/Wallet';
 import { WalletInput, WalletSchema, WalletData } from './schemas/WalletSchema';
 import { ErrorModel } from '../models/Error';
 import { WalletsCreatorService } from '../services/wallet/walletCreatorService';
