@@ -1,3 +1,10 @@
+# [grcpay-frontend-v1.2.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.1.0...grcpay-frontend-v1.2.0) (2026-05-26)
+
+
+### Features
+
+* add confirmation progress, store the wallet status ([3cc61c7](https://github.com/gridcat/grcpay/commit/3cc61c713675a8fc1b775bbf62b4d38b50fa4533))
+
 # [grcpay-frontend-v1.1.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.0.2...grcpay-frontend-v1.1.0) (2026-05-26)
 
 
