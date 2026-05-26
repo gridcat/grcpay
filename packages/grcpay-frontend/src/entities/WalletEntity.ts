@@ -45,6 +45,13 @@ export interface WalletRawData {
   // One-time reveal on the POST /wallets response. Subsequent GETs
   // omit it, so only the original creator ever sees the raw value.
   token?: string;
+  // Live confirmation depth and threshold. The backend computes
+  // these on demand for `confirming` wallets only (it samples the
+  // most recent indexed deposits and reports the min depth), so
+  // they're absent on every other status. Surface them as an
+  // "N of M" progress hint while the customer is waiting.
+  confirmations?: number | null;
+  confirmationsRequired?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -119,6 +126,21 @@ export class WalletEntity {
    */
   public token: string | null;
 
+  /**
+   * Live confirmation depth of the indexed deposits, only populated
+   * while `status === 'confirming'`. Null when the backend couldn't
+   * resolve it (nothing indexed yet, RPC blip), in which case the UI
+   * should fall back to a generic "awaiting confirmations" copy.
+   */
+  public confirmations: number | null;
+
+  /**
+   * The `MIN_CONFIRMATIONS` threshold the backend is gating against.
+   * Paired with `confirmations` so the integrator can render
+   * "N of M". Null on any non-confirming status.
+   */
+  public confirmationsRequired: number | null;
+
   public createdAt?: string;
 
   public updatedAt?: string;
@@ -140,6 +162,8 @@ export class WalletEntity {
     this.mode = data.mode ?? 'checkout';
     this.lifespanSeconds = data.lifespanSeconds ?? null;
     this.token = data.token ?? null;
+    this.confirmations = data.confirmations ?? null;
+    this.confirmationsRequired = data.confirmationsRequired ?? null;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
   }

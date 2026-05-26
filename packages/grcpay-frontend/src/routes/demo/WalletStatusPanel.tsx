@@ -13,6 +13,11 @@ import { WalletEntity, WalletStatus, formatGrc } from '@/entities/WalletEntity';
 
 interface Props {
   initialWallet: WalletEntity;
+  // Called every time the panel observes a new wallet state (poll
+  // tick or local cancel). The parent uses it to persist the latest
+  // snapshot to sessionStorage so a refresh restores the most recent
+  // status, not the original POST response.
+  onPersist?: (wallet: WalletEntity) => void;
   onReset: () => void;
 }
 
@@ -27,8 +32,16 @@ const STATUS_COLOR: Record<WalletStatus, 'default' | 'primary' | 'success' | 'wa
   error: 'error',
 };
 
-export function WalletStatusPanel({ initialWallet, onReset }: Props) {
-  const [wallet, setWallet] = useState<WalletEntity>(initialWallet);
+export function WalletStatusPanel({ initialWallet, onPersist, onReset }: Props) {
+  const [wallet, setWalletState] = useState<WalletEntity>(initialWallet);
+  // Single setter that keeps the parent in sync. Wrapping setWallet
+  // means every observable update — fresh GET from the poll loop, the
+  // optimistic cancel below — flows through onPersist without each
+  // call site having to remember.
+  const setWallet = React.useCallback((next: WalletEntity) => {
+    setWalletState(next);
+    if (onPersist) onPersist(next);
+  }, [onPersist]);
   // Poll while the wallet is still in flight — `new` OR `confirming`
   // (the latter means we saw enough funds at 0-conf, but they still
   // need to confirm before the wallet settles).
@@ -84,6 +97,11 @@ export function WalletStatusPanel({ initialWallet, onReset }: Props) {
         && latest.amountPending === wallet.amountPending
         && latest.refundTx === wallet.refundTx
         && latest.refundAmount === wallet.refundAmount
+        // Confirmations tick up between polls without anything else
+        // changing — include them in the skip-check so the "N of M"
+        // line updates without forcing a re-render on every idle tick.
+        && latest.confirmations === wallet.confirmations
+        && latest.confirmationsRequired === wallet.confirmationsRequired
       ) {
         return;
       }
@@ -194,9 +212,29 @@ export function WalletStatusPanel({ initialWallet, onReset }: Props) {
               borderLeftColor: 'info.main',
             }}
           >
-            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-              Payment detected, waiting for confirmations
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 0.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, flexGrow: 1 }}>
+                Payment detected, waiting for confirmations
+              </Typography>
+              {wallet.confirmations !== null && wallet.confirmationsRequired !== null && (
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'info.main' }}
+                >
+                  {`${wallet.confirmations} of ${wallet.confirmationsRequired}`}
+                </Typography>
+              )}
+            </Box>
+            {wallet.confirmations !== null && wallet.confirmationsRequired !== null && (
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(
+                  100,
+                  (wallet.confirmations / wallet.confirmationsRequired) * 100,
+                )}
+                sx={{ mb: 1, height: 6, borderRadius: 1 }}
+              />
+            )}
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Your full payment has arrived at the network level. GRCpay is
               waiting for a few more blocks before marking the wallet as
