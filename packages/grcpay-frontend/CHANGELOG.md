@@ -1,3 +1,10 @@
+# [grcpay-frontend-v1.1.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.0.2...grcpay-frontend-v1.1.0) (2026-05-26)
+
+
+### Features
+
+* outbound webhooks, crash-safe broadcasts, cancel-with-funds ([7e8d759](https://github.com/gridcat/grcpay/commit/7e8d75966530817f726779aa2be072dd105b761a))
+
 # [grcpay-frontend-v1.0.2](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.0.1...grcpay-frontend-v1.0.2) (2026-05-12)
 
 
