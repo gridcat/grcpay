@@ -1,0 +1,32 @@
+# Runtime SQLite data — bind-mounted from the host at runtime,
+# never belongs in the image. Also a real blocker: the dir is
+# often root-owned from earlier container runs, which makes the
+# build context unreadable for non-root host users.
+data/
+
+# Host-built node_modules — the image runs its own `npm install`
+# under Alpine/musl. Including the host's glibc-compiled binaries
+# (better-sqlite3) wastes context bytes and would shadow the
+# rebuild if anything ever copied them through.
+node_modules/
+
+# Build output — produced inside the image by `npm run build` in
+# Dockerfile.prod; the dev Dockerfile runs from source.
+dist/
+
+# Source control + editor noise
+.git/
+.gitignore
+.eslintignore
+.eslintrc.js
+.npmrc
+
+# Test + tooling artefacts
+coverage/
+.nyc_output/
+*.log
+
+# Local docs / changelogs that don't affect runtime
+README.md
+CHANGELOG.md
+LICENSE

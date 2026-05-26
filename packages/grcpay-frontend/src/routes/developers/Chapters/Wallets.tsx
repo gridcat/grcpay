@@ -182,32 +182,60 @@ export function Wallets() {
 
         <Endpoint method="DELETE" path="/api/wallets/:address" title="Cancel a live wallet" />
         <Typography gutterBottom variant="body1" component="p">
-          Merchant-initiated cancellation for wallets still in
-          {' '}
-          <code>new</code>
-          . Useful when the item just sold out, the order was aborted
-          upstream, or a customer explicitly abandoned checkout. The
-          wallet transitions straight to
-          {' '}
-          <code>expired</code>
-          {' '}
-          and the existing expired-refund flow returns any partial
-          balance that may already have arrived. Same
+          Merchant-initiated cancellation. Useful when the item sold
+          out, the order was aborted upstream, the customer abandoned
+          checkout, or you renegotiated the price and are re-issuing a
+          fresh wallet. Same
           {' '}
           <code>X-Wallet-Token</code>
           {' '}
-          header as GET. No token means 401, wrong token means 401.
-          Cancelling anything past
+          header as GET (no token or wrong token both return 401). The
+          wallet flips to
           {' '}
-          <code>new</code>
-          {' '}
-          returns
+          <code>expired</code>
+          . A
           {' '}
           <code>409 Conflict</code>
           {' '}
-          (the customer already paid, the merchant already got the
-          money, or the wallet already expired; in all those cases
-          cancellation is a no-op).
+          means cancel isn&apos;t safe right now: the wallet is already
+          terminal, a broadcast is mid-flight, or a refund has already
+          gone on-chain. Retry after a few seconds, by which point the
+          settlement has either finished or moved into the refund flow
+          on its own.
+        </Typography>
+        <Typography gutterBottom variant="body1" component="p">
+          Cancelling a paid wallet refunds the buyer. The refund flow
+          reads the
+          {' '}
+          <i>live on-chain</i>
+          {' '}
+          balance, then pays each sender back their contribution minus
+          the network fee. Transient sender-lookup misses or RPC blips
+          get retried under backoff, so the refund lands once the chain
+          catches up. The wallet ends
+          {' '}
+          <code>refunded</code>
+          , or
+          {' '}
+          <code>norefund</code>
+          {' '}
+          if nothing recoverable arrived, or
+          {' '}
+          <code>error</code>
+          {' '}
+          if a partial-refund failure needs a human. Reconcile by
+          address. If you mint a replacement wallet for the same order,
+          keep watching the old one until it terminalizes; a cancelled
+          wallet isn&apos;t &quot;closed&quot; the moment cancel
+          returns. With
+          {' '}
+          <code>webhookUrl</code>
+          {' '}
+          set, you&apos;ll get the
+          {' '}
+          <code>expired</code>
+          {' '}
+          and final terminal-state deliveries.
         </Typography>
         <CodeBlock
           caption="Request"
@@ -323,6 +351,8 @@ export function Wallets() {
       "amountRecieved":       "0",
       "amountPending": "150000000",
       "status": "confirming",
+      "confirmations": 1,
+      "confirmationsRequired": 3,
       …
     }
   }
@@ -351,6 +381,46 @@ export function Wallets() {
               {' '}
               <code>amountRecieved</code>
               . Mempool dust / dropped txs can also make it decrease.
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body1">
+              <code>confirmations</code>
+              :
+              {' '}
+              minimum confirmation depth across the deposits seen so
+              far, for the same &quot;N of M confirmations&quot; banner
+              the checkout UI uses to keep customers off the
+              panic-second-payment path. Only present while
+              {' '}
+              <code>status === &quot;confirming&quot;</code>
+              ; omitted in every other state so you can&apos;t
+              accidentally render a stale number.
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body1">
+              <code>confirmationsRequired</code>
+              :
+              {' '}
+              the threshold the wallet needs to clear to flip from
+              {' '}
+              <code>confirming</code>
+              {' '}
+              to
+              {' '}
+              <code>funded</code>
+              , i.e. the server&apos;s
+              {' '}
+              <code>MIN_CONFIRMATIONS</code>
+              {' '}
+              setting (3 on the public instance). Same
+              {' '}
+              <code>confirming</code>
+              -only visibility as
+              {' '}
+              <code>confirmations</code>
+              .
             </Typography>
           </li>
           <li>

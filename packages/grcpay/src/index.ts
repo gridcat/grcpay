@@ -10,6 +10,8 @@ import { WalletExpiredProcessorService } from './services/wallet/walletExpiredPr
 import { WalletFundedProcessorService } from './services/wallet/walletFundedProcessorService';
 import { WalletLatePaymentProcessorService } from './services/wallet/walletLatePaymentProcessorService';
 import { IncomingTxIndexerService } from './services/wallet/incomingTxIndexer';
+import { WebhookEnqueueService } from './services/webhook/webhookEnqueueService';
+import { WebhookDispatcherService } from './services/webhook/webhookDispatcherService';
 
 async function initConnections(): Promise<void> {
   while (!await connect()) {
@@ -54,6 +56,24 @@ async function main(): Promise<void> {
   startServer();
 
   DbLogService.registerEventListener();
+
+  // Outbound webhooks are strictly opt-in (per-wallet webhookUrl) and
+  // gated wholesale by WEBHOOKS_ENABLED. When off, neither the enqueue
+  // listener nor the dispatcher job exists — polling is unaffected.
+  if (config.WEBHOOKS_ENABLED) {
+    WebhookEnqueueService.registerEventListener();
+    schedule(
+      'Webhook dispatcher',
+      config.WEBHOOK_DISPATCH_INTERVAL,
+      () => WebhookDispatcherService.dispatchDue(),
+    );
+    log.info(
+      `Webhooks enabled (dispatch every ${config.WEBHOOK_DISPATCH_INTERVAL}s, `
+      + `max ${config.WEBHOOK_MAX_ATTEMPTS} attempts)`,
+    );
+  } else {
+    log.info('Webhooks disabled (WEBHOOKS_ENABLED=false)');
+  }
 
   schedule('Job loop', config.JOBS_INTERVAL, () => (
     // Record incoming receive txids BEFORE the balance/funded/expired

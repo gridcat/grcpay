@@ -17,6 +17,7 @@ export class WalletsCreatorServiceClass {
     recipient?: string,
     mode?: WalletMode,
     lifespanSeconds?: number,
+    webhookUrl?: string,
   ) {
     const resolvedMode = mode ?? WalletMode.checkout;
     if (!amountRequired) {
@@ -74,29 +75,67 @@ export class WalletsCreatorServiceClass {
     const tokenHash = hashToken(rawToken);
 
     const timestamp = now();
-    const inserted = await db
-      .insertInto('wallets')
-      .values({
-        address,
-        recipient: recipient ?? null,
-        amount_required: amountRequiredHalford,
-        amount_recieved: BigInt(0),
-        amount_pending: BigInt(0),
-        status: WalletStatus.new,
-        mode: resolvedMode,
-        lifespan_seconds: lifespanSeconds == null ? null : BigInt(lifespanSeconds),
-        token_hash: tokenHash,
-        refund_attempts: BigInt(0),
-        created_at: timestamp,
-        updated_at: timestamp,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    // Opt-in webhook config is inserted in the same transaction as the
+    // wallet row: if the webhook write fails for any reason, we must
+    // not leave the wallet behind, because the signing secret is a
+    // one-time reveal and we'd have no way to re-emit it. Atomic or not
+    // at all.
+    const webhookSecret = webhookUrl ? generateToken() : null;
+    const inserted = await db.transaction().execute(async (trx) => {
+      const walletRow = await trx
+        .insertInto('wallets')
+        .values({
+          address,
+          recipient: recipient ?? null,
+          amount_required: amountRequiredHalford,
+          amount_recieved: BigInt(0),
+          amount_pending: BigInt(0),
+          status: WalletStatus.new,
+          mode: resolvedMode,
+          lifespan_seconds: lifespanSeconds == null ? null : BigInt(lifespanSeconds),
+          token_hash: tokenHash,
+          refund_attempts: BigInt(0),
+          created_at: timestamp,
+          updated_at: timestamp,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      if (webhookUrl && webhookSecret) {
+        await trx
+          .insertInto('wallet_webhooks')
+          .values({
+            wallet_id: walletRow.id,
+            url: webhookUrl,
+            secret: webhookSecret,
+            created_at: timestamp,
+            updated_at: timestamp,
+          })
+          .execute();
+      }
+      return walletRow;
+    });
 
     const newWallet = Wallet.fromRow(inserted);
     newWallet.token = rawToken;
 
     const walletId = newWallet.id!;
+
+    // Opt-in webhook config. No connectivity preflight here on
+    // purpose (the URL was already syntactically validated by the Joi
+    // schema; we do not ping caller-supplied URLs at creation). The
+    // signing secret follows the same one-time-reveal contract as the
+    // wallet token, but is stored RAW — a hashed HMAC key is useless
+    // at delivery time.
+    //
+    // The webhook URL itself is intentionally NOT mirrored into
+    // db_logs: integrators sometimes embed opaque tokens in the URL
+    // path/query as poor-man's auth, and the audit table is too easy
+    // to leak (backups, ops dashboards, future admin panel). The
+    // canonical copy lives in wallet_webhooks.url where the dispatcher
+    // reads it; that's where it should stay.
+    if (webhookUrl && webhookSecret) {
+      newWallet.webhookSecret = webhookSecret;
+    }
     getEventEmitter<DbLogMessage>().emit('log', {
       walletId,
       action: 'amount_required',

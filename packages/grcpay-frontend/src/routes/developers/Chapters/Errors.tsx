@@ -107,17 +107,38 @@ export function Errors() {
               {' '}
               <code>DELETE</code>
               {' '}
-              a wallet that&apos;s past the
+              a wallet that can&apos;t be cancelled right now. The
+              wallet is already terminal (
+              <code>processed</code>
+              ,
               {' '}
-              <code>new</code>
+              <code>refunded</code>
+              ,
               {' '}
-              state. Cancellation is only valid on a wallet nobody has
-              paid into yet. Once it&apos;s
+              <code>norefund</code>
+              ,
+              {' '}
+              <code>expired</code>
+              ,
+              {' '}
+              <code>error</code>
+              ),
+              {' '}
+              <code>tx_out</code>
+              {' '}
+              is already written, a broadcast is mid-flight, or a
+              refund has already gone on-chain. Retry after a few
+              seconds. A
               {' '}
               <code>funded</code>
               {' '}
-              the funds are the merchant&apos;s and any refund has to
-              happen out of band.
+              wallet with no in-flight broadcast and no prior refund
+              still cancels cleanly: it flips to
+              {' '}
+              <code>expired</code>
+              {' '}
+              and the buyer&apos;s balance is returned to its sender
+              on the next refund sweep.
             </Typography>
           </li>
           <li>

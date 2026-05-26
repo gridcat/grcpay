@@ -167,6 +167,13 @@ describe('Wallet lifecycle integration', () => {
       } as any;
     });
     mockRpc.sendToAddress.mockResolvedValue('refund_tx_lifecycle');
+    // The expired processor now reads LIVE chain balance via
+    // getReceivedByAddress rather than the cached amount_recieved
+    // column. createMockRpc defaults that mock to 0, which would
+    // make the processor classify the wallet as zero-balance and
+    // terminalize as `norefund`. Wire the inbound balance so the
+    // refund path actually runs.
+    mockRpc.getReceivedByAddress.mockResolvedValue(5);
 
     await expiredProcessor.processExpired();
 

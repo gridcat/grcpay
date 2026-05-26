@@ -89,6 +89,19 @@ interface WalletsTable {
   // daemon can't wedge a wallet in a permanent retry loop.
   refund_attempts: ColumnType<bigint, bigint | undefined, bigint>;
 
+  // Pre-broadcast intent marker. Set BEFORE every sendToAddress call,
+  // cleared in the same statement that persists the broadcast's
+  // result txid. A SIGKILL between sendToAddress returning and the
+  // durable result UPDATE would otherwise leave the row at a state
+  // where the next tick re-detects "needs broadcast" and re-broadcasts.
+  // loadFunded / expireWallets / cancel all filter on IS NULL so a
+  // mid-broadcast row stays off their candidate set;
+  // recoverInterruptedSettlements walks IS NOT NULL rows on boot and
+  // reconciles against the daemon's recent send history.
+  // Format: `<type>:<wallet_id>:<extra>:<unix_ts>` (see the
+  // pending_broadcast migration for the type set).
+  pending_broadcast: string | null;
+
   created_at: IsoDateTime;
   updated_at: IsoDateTime;
 }
@@ -120,10 +133,60 @@ interface IncomingTxsTable {
   observed_at: IsoDateTime;
 }
 
+// Opt-in outbound-webhook config, one row per wallet that passed a
+// webhookUrl at creation. `secret` is the RAW HMAC key (not a hash like
+// wallets.token_hash) — we need it intact at delivery time to sign
+// every payload; it's revealed to the integrator once and never again.
+interface WalletWebhooksTable {
+  id: Generated<bigint>;
+  wallet_id: bigint;
+  url: string;
+  secret: string;
+  created_at: IsoDateTime;
+  updated_at: IsoDateTime;
+}
+
+// Closed lifecycle for a queued delivery row. Enum'd (not bare string
+// literals) so a typo'd status can't silently make a row unclaimable —
+// same rationale as WalletStatus.
+export const WebhookDeliveryStatus = {
+  pending: 'pending',
+  delivered: 'delivered',
+  dead: 'dead',
+} as const;
+export type WebhookDeliveryStatus =
+  typeof WebhookDeliveryStatus[keyof typeof WebhookDeliveryStatus];
+
+// The durable delivery queue. One row per webhook-worthy status
+// transition. Durability lives here rather than in the in-process
+// event emitter, so a restart between enqueue and delivery can't lose
+// the event. `old_status` is normalised to '' (never NULL) by the
+// enqueue path so the (wallet_id, new_status, old_status) unique
+// dedup constraint actually fires.
+interface WebhookDeliveriesTable {
+  id: Generated<bigint>;
+  wallet_id: bigint;
+  event_uuid: string;
+  old_status: string;
+  new_status: string;
+  payload: string;
+  status: WebhookDeliveryStatus;
+  attempts: ColumnType<bigint, bigint | undefined, bigint>;
+  next_attempt_at: IsoDateTime;
+  // INTEGER column → bigint on read (defaultSafeIntegers), but we only
+  // ever write a plain HTTP status number or null.
+  last_response_code: ColumnType<bigint | null, number | null, number | null>;
+  last_error: string | null;
+  created_at: IsoDateTime;
+  updated_at: IsoDateTime;
+}
+
 export interface Database {
   wallets: WalletsTable;
   db_logs: DbLogsTable;
   incoming_txs: IncomingTxsTable;
+  wallet_webhooks: WalletWebhooksTable;
+  webhook_deliveries: WebhookDeliveriesTable;
 }
 
 export type WalletRow = Selectable<WalletsTable>;
@@ -135,3 +198,10 @@ export type NewDbLogRow = Insertable<DbLogsTable>;
 
 export type IncomingTxRow = Selectable<IncomingTxsTable>;
 export type NewIncomingTxRow = Insertable<IncomingTxsTable>;
+
+export type WalletWebhookRow = Selectable<WalletWebhooksTable>;
+export type NewWalletWebhookRow = Insertable<WalletWebhooksTable>;
+
+export type WebhookDeliveryRow = Selectable<WebhookDeliveriesTable>;
+export type NewWebhookDeliveryRow = Insertable<WebhookDeliveriesTable>;
+export type WebhookDeliveryRowUpdate = Updateable<WebhookDeliveriesTable>;

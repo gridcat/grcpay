@@ -8,6 +8,9 @@ import { WalletInput, WalletSchema, WalletData } from './schemas/WalletSchema';
 import { ErrorModel } from '../models/Error';
 import { WalletsCreatorService } from '../services/wallet/walletCreatorService';
 import { WalletCancelService, WalletCancelError } from '../services/wallet/walletCancelService';
+import { WalletsService } from '../services/wallet/walletsService';
+import { WalletStatus } from '../models/Wallet';
+import { config } from '../config';
 
 const { Store } = yayson();
 
@@ -27,8 +30,27 @@ export class WalletController extends Controller {
    * Renders a pre-authenticated wallet. The auth middleware already
    * loaded the wallet by address and verified the token, so we just
    * serialize it here — no second DB fetch, no 404 branch.
+   *
+   * For `confirming` wallets only, also resolve the live
+   * confirmation depth of the indexed deposits so the integrator can
+   * render "N of M confirmations". Skipped in any other status —
+   * confirmation depth has no meaning for `new` (no funds yet) or
+   * `funded`/later (already past threshold).
    */
-  public renderWallet(wallet: Wallet): void {
+  public async renderWallet(wallet: Wallet): Promise<void> {
+    if (wallet.status === WalletStatus.confirming && wallet.id !== undefined) {
+      // confirmations / confirmationsRequired are documented as a
+      // pair — only surface them together. If getMinConfirmations
+      // returns null (nothing indexed yet, or every getTransaction
+      // RPC failed), the integrator falls back to the generic
+      // "awaiting confirmations" copy rather than rendering a
+      // misleading "? of 3" banner.
+      const depth = await WalletsService.getMinConfirmations(wallet.id);
+      if (depth !== null) {
+        wallet.confirmations = depth;
+        wallet.confirmationsRequired = config.MIN_CONFIRMATIONS;
+      }
+    }
     this.res
       .status(StatusCodes.OK)
       .send(this.render<Wallet>(wallet));
@@ -95,6 +117,7 @@ export class WalletController extends Controller {
       data.recipient,
       data.mode,
       data.lifespanSeconds,
+      data.webhookUrl,
     );
 
     this.res

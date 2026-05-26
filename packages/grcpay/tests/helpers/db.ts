@@ -17,6 +17,7 @@ interface InsertWalletOverrides {
   lifespan_seconds?: number | null;
   token_hash?: string;
   refund_attempts?: number;
+  pending_broadcast?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -42,6 +43,8 @@ export async function setupTestDb(): Promise<void> {
 export async function truncateAll(): Promise<void> {
   // Order matters only if foreign keys are enabled; we don't have any
   // declared, but keep child-first ordering for clarity.
+  await db.deleteFrom('webhook_deliveries').execute();
+  await db.deleteFrom('wallet_webhooks').execute();
   await db.deleteFrom('incoming_txs').execute();
   await db.deleteFrom('db_logs').execute();
   await db.deleteFrom('wallets').execute();
@@ -71,6 +74,7 @@ export async function insertWallet(overrides: InsertWalletOverrides = {}): Promi
         : BigInt(overrides.lifespan_seconds),
       token_hash: overrides.token_hash ?? 'deadbeef'.repeat(8),
       refund_attempts: BigInt(overrides.refund_attempts ?? 0),
+      pending_broadcast: overrides.pending_broadcast ?? null,
       created_at: ts,
       updated_at: overrides.updated_at ?? ts,
     })

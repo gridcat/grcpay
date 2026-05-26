@@ -49,7 +49,24 @@ function check_status(ajax_url) {
                 jQuery('.grcpay_loader').remove();
             }
 
-            if (data.is_pending === 1) {
+            // `is_pending` means grcpay has seen funds on the wallet but
+            // it's still in `new` (not yet `confirming`/`funded`). That
+            // covers TWO very different situations and they must not be
+            // treated the same:
+            //
+            //   * remaining > 0 — a PARTIAL payment. The customer still
+            //     owes money. Tearing down the checkout (loader, cancel
+            //     timer, QR/amount) and sliding to the terminal
+            //     "processing" screen would tell them they're done when
+            //     they aren't, and nothing here ever reverts it. The
+            //     partial-received and pending-confs notifications below
+            //     already message this correctly, so we leave the
+            //     checkout intact and do nothing destructive here.
+            //
+            //   * remaining == 0 — the full amount is in; grcpay just
+            //     hasn't advanced the wallet past `new` yet. Same
+            //     reassurance as a settled payment is appropriate.
+            if (data.is_pending === 1 && parseFloat(data.remaining) <= 0) {
                 waiting_payment.addClass('done');
                 waiting_network.addClass('done');
                 jQuery('.grcpay_loader').remove();

@@ -5,13 +5,14 @@ LABEL description="Development environment for grcpay backend service"
 
 # better-sqlite3 ships prebuilt binaries for common platforms but
 # falls back to compiling from source on Alpine, which needs the
-# usual toolchain. Cheap on a one-time install.
-RUN apk add --no-cache python3 make g++
+# usual toolchain. Cheap on a one-time install. su-exec lets the
+# compose `command:` drop from root to the host UID after chowning
+# the anon node_modules volume.
+RUN apk add --no-cache python3 make g++ su-exec
 
 WORKDIR /usr/src/app
 
 COPY . /usr/src/app
-RUN rm -rf ./node_modules
 
 RUN npm install
 

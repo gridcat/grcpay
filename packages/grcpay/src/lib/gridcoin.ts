@@ -2,6 +2,7 @@
 import { GridcoinRPC } from 'gridcoin-rpc';
 import { config } from '../config';
 import { log } from './log';
+import { withTimeout } from './withTimeout';
 
 const wait = (ms: number) => new Promise((resolve) => {
   setTimeout(resolve, ms);
@@ -15,17 +16,6 @@ const wait = (ms: number) => new Promise((resolve) => {
 // short enough that one stuck call can't keep the processor frozen
 // across the full JOBS_INTERVAL cadence.
 const RPC_TIMEOUT_MS = 30_000;
-
-async function withTimeout<T>(p: Promise<T>, method: string, ms = RPC_TIMEOUT_MS): Promise<T> {
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`Gridcoin RPC ${method} timed out after ${ms}ms`)),
-      ms,
-    );
-  });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
-}
 
 // Circuit breaker for the Gridcoin RPC client. Wraps the per-call
 // timeout above with a failure-rate gate so grcpay stops hammering a
@@ -144,7 +134,7 @@ export const rpc = new Proxy(rawRpc, {
       if (!result || typeof (result as Promise<unknown>).then !== 'function') {
         return result;
       }
-      return withTimeout(result as Promise<unknown>, method)
+      return withTimeout(result as Promise<unknown>, RPC_TIMEOUT_MS, `Gridcoin RPC ${method}`)
         .then((ok) => {
           breaker.recordSuccess();
           return ok;

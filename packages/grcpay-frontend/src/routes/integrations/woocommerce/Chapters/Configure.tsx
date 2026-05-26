@@ -43,6 +43,20 @@ export function Configure() {
           <code>processed</code>
           .
         </Typography>
+        <Typography gutterBottom variant="body1" component="p">
+          If you cancel an order the customer has already paid (say, you
+          agreed a new price and are re-issuing it), GRCpay returns the
+          buyer&apos;s funds automatically. The plugin tracks the
+          original wallet to its
+          {' '}
+          <code>refunded</code>
+          {' '}
+          state and notes the refund on the order timeline, so there is
+          no manual step. A partial payment that doesn&apos;t yet cover
+          the invoice keeps the checkout visible so the customer can send
+          the rest, instead of prematurely showing a
+          &quot;payment processing&quot; screen.
+        </Typography>
       </Box>
     </Box>
   );

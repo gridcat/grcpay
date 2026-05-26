@@ -6,6 +6,7 @@ const entries: PageContentsEntry[] = [
   { id: 'conventions', label: 'Conventions' },
   { id: 'status', label: 'Status' },
   { id: 'wallets', label: 'Wallets' },
+  { id: 'webhooks', label: 'Webhooks' },
   { id: 'fee-math', label: 'Fee & refund math' },
   { id: 'qr', label: 'QR Codes' },
   { id: 'rates', label: 'Rates' },

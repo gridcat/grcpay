@@ -70,7 +70,29 @@ export class Wallet implements GenericInterface {
   // subsequent GETs — the raw token is a one-time reveal.
   public token?: string;
 
+  // Same transient one-time-reveal contract as `token`: populated only
+  // on the Wallet returned by the creator service when a webhookUrl
+  // was supplied, so the presenter can echo it once on the POST
+  // response. Undefined after fromRow, so GETs never re-expose it.
+  public webhookSecret?: string;
+
+  // Transient per-request fields powering the integrator's
+  // "N of M confirmations" UI. Computed in the controller on the GET
+  // path (status === confirming only), undefined elsewhere — neither
+  // is persisted on the wallet row because confirmations move every
+  // block.
+  public confirmations?: number | null;
+
+  public confirmationsRequired?: number;
+
   public refundAttempts!: number;
+
+  // True if a settlement/refund broadcast is currently in flight (or
+  // is stalled mid-flight pending operator reconciliation). Surfaced
+  // as a coarse boolean by the presenter so integrators have an API-
+  // visible signal that a wallet is settling vs idle, without exposing
+  // the internal marker grammar.
+  public pendingBroadcast?: boolean;
 
   public status!: WalletStatus;
 
@@ -92,6 +114,8 @@ export class Wallet implements GenericInterface {
     'mode',
     'lifespanSeconds',
     'token',
+    'webhookSecret',
+    'pendingBroadcast',
   ];
 
   // Maps a raw DB row (snake_case, bigint id) into the camelCase
@@ -117,6 +141,7 @@ export class Wallet implements GenericInterface {
       : Number(row.lifespan_seconds);
     wallet.tokenHash = row.token_hash;
     wallet.refundAttempts = Number(row.refund_attempts);
+    wallet.pendingBroadcast = row.pending_broadcast !== null;
     wallet.createdAt = new Date(row.created_at);
     wallet.updatedAt = new Date(row.updated_at);
     return wallet;

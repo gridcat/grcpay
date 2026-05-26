@@ -19,6 +19,7 @@ import {
   Conventions,
   Status,
   Wallets,
+  Webhooks,
   FeeMath,
   Qr,
   Rates,
@@ -76,6 +77,7 @@ export function Page() {
               <Conventions />
               <Status />
               <Wallets />
+              <Webhooks />
               <FeeMath />
               <Qr />
               <Rates />

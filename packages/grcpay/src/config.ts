@@ -89,9 +89,27 @@ interface Config {
   // stores the result in amount_recieved — anything with fewer
   // confirmations is reported separately as amount_pending so the
   // integrator can surface a "waiting for N confirmations" state to
-  // the user. Default 2, which matches the standard crypto e-commerce
-  // hardening against same-block reorgs.
+  // the user.
+  //
+  // Critically, this threshold also gates when the funded processor
+  // attempts to forward to the merchant: the wallet daemon's
+  // sendtoaddress refuses to spend a UTXO that the daemon's own
+  // coin-selection still treats as too shallow, returning "Insufficient
+  // funds" even though our settled balance is non-zero. We need
+  // MIN_CONFIRMATIONS to clear that bar comfortably, otherwise the
+  // forward fails, the wallet parks in `error`, and the customer ends
+  // up refunded at expiry. Default 3 — enough headroom over the
+  // daemon's internal spendable-depth check to make the
+  // "Insufficient funds" race disappear, without making customers
+  // wait the ~9 minutes that Bitcoin's 6-conf convention would
+  // imply on Gridcoin's 90s blocks.
   MIN_CONFIRMATIONS: number;
+  // Cap on how many of the most-recent incoming_txs rows we sample when
+  // computing the "N of M confirmations" depth for a confirming wallet.
+  // Bounds RPC fan-out so dust-spam against a confirming address can't
+  // multiply daemon load per integrator poll. The min depth is dominated
+  // by the latest tx in practice, so this sample-most-recent is faithful.
+  MAX_CONFIRMATION_SAMPLE: number;
   // Per-IP sliding-window rate limits, keyed by endpoint class.
   // Window is always 60 seconds. Tighter on write endpoints (create /
   // cancel) because those touch the wallet daemon and cost real RPC
@@ -128,6 +146,37 @@ interface Config {
   // trusted upstream (the usual nginx-in-front deployment). Set to 0
   // if grcpay is directly exposed on a public port with no proxy.
   TRUST_PROXY_HOPS: number;
+  // Outbound webhooks. Strictly opt-in and additive: a wallet only
+  // gets webhook delivery if the caller passed a webhookUrl at
+  // POST /wallets — every wallet still supports polling exactly as
+  // before. Disabled wholesale by default; the public sandbox
+  // instance leaves it off (it's custodial), self-hosters opt in.
+  WEBHOOKS_ENABLED: boolean;
+  // Allow webhook targets that resolve to private/loopback ranges and
+  // permit http:// (not just https://). Off by default. Exists so the
+  // family's own WooCommerce test install, which lives on the docker
+  // network behind a private IP, can receive webhooks. Never enable on
+  // an internet-facing instance — it removes the SSRF egress guard.
+  WEBHOOK_ALLOW_PRIVATE: boolean;
+  // How often (seconds) the webhook dispatcher drains the delivery
+  // queue. Independent of JOBS_INTERVAL: delivery is out-of-band so it
+  // never blocks the wallet state machine.
+  WEBHOOK_DISPATCH_INTERVAL: number;
+  // Max delivery rows claimed per dispatcher tick. Bounds one tick's
+  // work so a backlog drains over several ticks (oldest first) instead
+  // of one unbounded run holding the SQLite write path.
+  WEBHOOK_BATCH_SIZE: number;
+  // Delivery attempts before a row is dead-lettered (status='dead').
+  // With WEBHOOK_RETRY_BASE_DELAY=30 the 6 attempts span
+  // 30s/1m/2m/4m/8m ≈ 16 min of retry budget.
+  WEBHOOK_MAX_ATTEMPTS: number;
+  // Exponential-backoff base (seconds) between delivery retries:
+  // attempt N waits WEBHOOK_RETRY_BASE_DELAY * 2^(N-1). Mirrors the
+  // refund backoff shape.
+  WEBHOOK_RETRY_BASE_DELAY: number;
+  // Per-delivery HTTP timeout (ms). A slow receiver counts as a failed
+  // attempt and is retried; it can't wedge the dispatcher.
+  WEBHOOK_TIMEOUT_MS: number;
 }
 
 /**
@@ -161,6 +210,7 @@ nconf
       'MAX_REFUND_ATTEMPTS',
       'REFUND_RETRY_BASE_DELAY',
       'MIN_CONFIRMATIONS',
+      'MAX_CONFIRMATION_SAMPLE',
       'RATE_LIMIT_WALLET_CREATE_PER_MIN',
       'RATE_LIMIT_WALLET_READ_PER_MIN',
       'RATE_LIMIT_WALLET_DELETE_PER_MIN',
@@ -169,6 +219,13 @@ nconf
       'RPC_BREAKER_THRESHOLD',
       'RPC_BREAKER_COOLDOWN_MS',
       'TRUST_PROXY_HOPS',
+      'WEBHOOKS_ENABLED',
+      'WEBHOOK_ALLOW_PRIVATE',
+      'WEBHOOK_DISPATCH_INTERVAL',
+      'WEBHOOK_BATCH_SIZE',
+      'WEBHOOK_MAX_ATTEMPTS',
+      'WEBHOOK_RETRY_BASE_DELAY',
+      'WEBHOOK_TIMEOUT_MS',
     ],
     // nconf stores env values as strings. Parse the numeric settings
     // so downstream code can do arithmetic on them without Number(...)
@@ -192,7 +249,8 @@ nconf
     LATE_PAYMENT_CHECK_INTERVAL: 60 * 60, // 1 hour
     MAX_REFUND_ATTEMPTS: 5,
     REFUND_RETRY_BASE_DELAY: 30,
-    MIN_CONFIRMATIONS: 2,
+    MIN_CONFIRMATIONS: 3,
+    MAX_CONFIRMATION_SAMPLE: 10,
     RATE_LIMIT_WALLET_CREATE_PER_MIN: 300,
     RATE_LIMIT_WALLET_READ_PER_MIN: 1800,
     RATE_LIMIT_WALLET_DELETE_PER_MIN: 300,
@@ -201,6 +259,13 @@ nconf
     RPC_BREAKER_THRESHOLD: 5,
     RPC_BREAKER_COOLDOWN_MS: 30_000,
     TRUST_PROXY_HOPS: 1,
+    WEBHOOKS_ENABLED: false,
+    WEBHOOK_ALLOW_PRIVATE: false,
+    WEBHOOK_DISPATCH_INTERVAL: 15,
+    WEBHOOK_BATCH_SIZE: 50,
+    WEBHOOK_MAX_ATTEMPTS: 6,
+    WEBHOOK_RETRY_BASE_DELAY: 30,
+    WEBHOOK_TIMEOUT_MS: 10_000,
   });
 
 // Check required settings.
@@ -218,6 +283,115 @@ checkConfig([
 const networkValue = nconf.get('NETWORK');
 if (networkValue !== 'mainnet' && networkValue !== 'testnet') {
   throw new Error(`NETWORK must be either 'mainnet' or 'testnet', got: ${networkValue}`);
+}
+
+// nconf's parseValues:true only applies to the .env() layer above.
+// Values coming from .argv() (CLI overrides like
+// `--MAX_CONFIRMATION_SAMPLE=10`) stay as strings, and a string slipping
+// into `.limit(...)` or arithmetic blows up only at the call site —
+// hours of debugging later. Coerce the whole numeric surface here at
+// boot so downstream code can trust the types.
+const NUMERIC_KEYS = [
+  'GRC_RPC_PORT',
+  'PORT',
+  'LIFE_SPAN',
+  'JOBS_INTERVAL',
+  'HALFORD',
+  'MIN_FEE',
+  'LATE_PAYMENT_WINDOW',
+  'LATE_PAYMENT_CHECK_INTERVAL',
+  'MAX_REFUND_ATTEMPTS',
+  'REFUND_RETRY_BASE_DELAY',
+  'MIN_CONFIRMATIONS',
+  'MAX_CONFIRMATION_SAMPLE',
+  'RATE_LIMIT_WALLET_CREATE_PER_MIN',
+  'RATE_LIMIT_WALLET_READ_PER_MIN',
+  'RATE_LIMIT_WALLET_DELETE_PER_MIN',
+  'RATE_LIMIT_QR_PER_MIN',
+  'RATE_LIMIT_RATES_PER_MIN',
+  'RPC_BREAKER_THRESHOLD',
+  'RPC_BREAKER_COOLDOWN_MS',
+  'TRUST_PROXY_HOPS',
+  'WEBHOOK_DISPATCH_INTERVAL',
+  'WEBHOOK_BATCH_SIZE',
+  'WEBHOOK_MAX_ATTEMPTS',
+  'WEBHOOK_RETRY_BASE_DELAY',
+  'WEBHOOK_TIMEOUT_MS',
+];
+for (const key of NUMERIC_KEYS) {
+  const raw = nconf.get(key);
+  if (raw === undefined || raw === null) continue;
+  if (typeof raw === 'number') continue;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a finite number, got: ${raw}`);
+  }
+  nconf.set(key, n);
+}
+
+// Lower-bound validation for values whose 0/negative form silently
+// breaks a downstream feature rather than failing loudly. Each entry
+// is the key name and the rationale for the floor.
+//   MAX_CONFIRMATION_SAMPLE: 0 → confirming-wallet GET silently omits
+//     confirmations/confirmationsRequired.
+//   WEBHOOK_BATCH_SIZE: 0 → dispatchDue does LIMIT 0 → no webhook
+//     ever delivers, only signal is the absence of "N delivery(ies)
+//     due" log lines.
+//   WEBHOOK_MAX_ATTEMPTS: 0 → every first failure dead-letters
+//     immediately, no retry budget.
+//   WEBHOOK_DISPATCH_INTERVAL: 0 → schedule() tick semantics depend
+//     on the helper; either pins CPU or never fires. Either way the
+//     dispatcher isn't doing what its name suggests.
+//   WEBHOOK_RETRY_BASE_DELAY: 0 → next_attempt_at=now on every
+//     failure, the entire MAX_ATTEMPTS budget burns in one dispatcher
+//     tick.
+//   WEBHOOK_TIMEOUT_MS: a value < ~100 is effectively no-timeout
+//     since a fresh TCP connection rarely completes faster; 1 is the
+//     defensible floor — operators wanting "unlimited" should keep
+//     the default (10s) rather than zero.
+// Most webhook numerics floor at 1 — 0/negative silently breaks
+// delivery. WEBHOOK_TIMEOUT_MS gets a higher floor (100ms) because
+// anything below the TCP handshake floor effectively turns every
+// delivery into an ECONNABORTED before bytes leave the host, which
+// reads as "always-timeout" not the "no-timeout" semantics the >=1
+// guard might suggest.
+const MIN_BOUNDS: Record<string, number> = {
+  MAX_CONFIRMATION_SAMPLE: 1,
+  WEBHOOK_BATCH_SIZE: 1,
+  WEBHOOK_MAX_ATTEMPTS: 1,
+  WEBHOOK_DISPATCH_INTERVAL: 1,
+  WEBHOOK_RETRY_BASE_DELAY: 1,
+  WEBHOOK_TIMEOUT_MS: 100,
+};
+for (const [key, floor] of Object.entries(MIN_BOUNDS)) {
+  const v = nconf.get(key);
+  if (typeof v !== 'number' || v < floor) {
+    throw new Error(
+      `${key} must be a number >= ${floor} (got: ${v}). Smaller values `
+      + 'silently break a downstream feature — see config.ts.',
+    );
+  }
+}
+
+// MIN_CONFIRMATIONS default was bumped from 2 → 3 to clear the
+// wallet daemon's spendable-depth race. Warn one-shot at boot if the
+// operator didn't pin the value via env so anyone whose merchant docs
+// or UI copy quote "2 of 2 confirmations" notices the change before
+// customers do. Skipped under NODE_ENV=testing so the test suite
+// doesn't flood stderr.
+if (
+  process.env.NODE_ENV !== 'testing'
+  && process.env.MIN_CONFIRMATIONS === undefined
+  && nconf.get('MIN_CONFIRMATIONS') === 3
+) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[config] MIN_CONFIRMATIONS=3 (default). Previous default was 2 — '
+    + 'every customer payment now waits one extra block (~90s) before '
+    + 'settlement. Set MIN_CONFIRMATIONS=2 via env to restore the old '
+    + 'behaviour; the bump is intentional and avoids the daemon\'s '
+    + '"Insufficient funds" spendable-depth race.',
+  );
 }
 
 export const config = Object.freeze(nconf.get()) as Config;

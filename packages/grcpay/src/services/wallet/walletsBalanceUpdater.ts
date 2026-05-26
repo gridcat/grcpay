@@ -75,7 +75,13 @@ export class WalletsBalanceUpdaterServiceClass {
       return;
     }
 
-    await db
+    // Only write back if the wallet is STILL open. Between the SELECT
+    // above and this UPDATE, a cancel/expireWallets/findFundedWallets
+    // can flip the row to a terminal status; without the guard, the
+    // cached amounts (which the live expired processor doesn't read,
+    // but the presenter and any admin/reporting UI does) get rewritten
+    // onto a terminal row with values stale enough to mislead.
+    const result = await db
       .updateTable('wallets')
       .set({
         amount_recieved: balanceHalford,
@@ -83,7 +89,14 @@ export class WalletsBalanceUpdaterServiceClass {
         updated_at: now(),
       })
       .where('id', '=', wallet.id)
-      .execute();
+      .where('status', 'in', [WalletStatus.new, WalletStatus.confirming])
+      .executeTakeFirst();
+    if (!result.numUpdatedRows || Number(result.numUpdatedRows) === 0) {
+      // Concurrent writer flipped the row to a terminal status — the
+      // write no-oped. Skip the audit emits or db_logs records a
+      // phantom transition that never actually persisted.
+      return;
+    }
 
     if (balanceHalford !== wallet.amount_recieved) {
       getEventEmitter<DbLogMessage>().emit('log', {
