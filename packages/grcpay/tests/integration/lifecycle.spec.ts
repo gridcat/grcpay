@@ -110,7 +110,7 @@ describe('Wallet lifecycle integration', () => {
     );
   });
 
-  it('refunds an overpayment and forwards the exact required amount', async () => {
+  it('refunds the full overpayment and forwards required-minus-fee in one sendMany', async () => {
     await insertWallet({
       address: WALLET_ADDR,
       recipient: RECIPIENT_ADDR,
@@ -122,16 +122,25 @@ describe('Wallet lifecycle integration', () => {
     });
 
     wireSender(mockRpc);
-    mockRpc.sendToAddress
-      .mockResolvedValueOnce('refund_tx')
-      .mockResolvedValueOnce('forward_tx');
+    mockRpc.sendMany.mockResolvedValue('settle_tx');
     await fundedProcessor.processFunded();
+
+    // Refund + forward go out as a single sendMany (one coin selection),
+    // so the two payouts can't race the shared pool. Fee policy A: buyer
+    // refunded the FULL 2 GRC overpayment, merchant gets required - fee.
+    expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+    expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+    const [account, recipients] = mockRpc.sendMany.mock.calls[0];
+    expect(account).toBe('');
+    expect(recipients[SENDER_ADDR]).toBeCloseTo(2, 6);
+    expect(recipients[RECIPIENT_ADDR]).toBeCloseTo(9.999, 3);
 
     const row = await readWallet(WALLET_ADDR);
     expect(row.status).toBe(WalletStatus.processed);
-    expect(row.tx_out).toBe('forward_tx');
-    expect(row.refund_tx).toBe('refund_tx');
-    expect(row.refund_amount).toBe(BigInt(199_900_000));
+    // tx_out and refund_tx both reference the single settle tx.
+    expect(row.tx_out).toBe('settle_tx');
+    expect(row.refund_tx).toBe('settle_tx');
+    expect(row.refund_amount).toBe(BigInt(200_000_000));
   });
 
   it('expires a stale wallet and refunds any partial balance to its sender', async () => {
