@@ -172,7 +172,7 @@ describe('WalletFundedProcessorService', () => {
       expect(after.refund_amount).toBeNull();
     });
 
-    it('refunds overpayment and forwards exact required amount when overpayment > fee', async () => {
+    it('refunds the full overpayment and forwards required-minus-fee in ONE sendMany', async () => {
       const row = await insertWallet({
         address: WALLET_ADDR,
         recipient: RECIPIENT_ADDR,
@@ -181,31 +181,33 @@ describe('WalletFundedProcessorService', () => {
         amount_recieved: BigInt(1_200_000_000),
       });
       wireFindSender(mockRpc);
-      mockRpc.sendToAddress
-        .mockResolvedValueOnce('refund_tx_abc')
-        .mockResolvedValueOnce('forward_tx_def');
+      mockRpc.sendMany.mockResolvedValue('settle_tx_xyz');
 
       await service.processFunded();
 
-      expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(2);
-      const refundCall = mockRpc.sendToAddress.mock.calls[0];
-      expect(refundCall[0]).toBe(SENDER_ADDR);
-      expect(refundCall[1]).toBeCloseTo(1.999, 3);
-      const forwardCall = mockRpc.sendToAddress.mock.calls[1];
-      expect(forwardCall[0]).toBe(RECIPIENT_ADDR);
-      expect(forwardCall[1]).toBeCloseTo(9.999, 3);
-      expect(forwardCall[2]).toBe(WALLET_ADDR);
+      // Refund + forward go out as a single sendMany (one coin
+      // selection) — no separate sendToAddress calls that could race
+      // each other over the shared pool ("coins already spent").
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      const [account, recipients] = mockRpc.sendMany.mock.calls[0];
+      expect(account).toBe('');
+      // Fee policy A: buyer refunded the FULL overpayment (2 GRC),
+      // merchant gets required - fee (9.999 GRC). One network fee.
+      expect(recipients[SENDER_ADDR]).toBeCloseTo(2, 6);
+      expect(recipients[RECIPIENT_ADDR]).toBeCloseTo(9.999, 3);
 
       const after = await readWallet(row.id);
       expect(after.status).toBe(WalletStatus.processed);
-      expect(after.tx_out).toBe('forward_tx_def');
-      expect(after.refund_tx).toBe('refund_tx_abc');
-      expect(after.refund_amount).toBe(BigInt(199_900_000));
+      // tx_out and refund_tx both reference the single settle tx.
+      expect(after.tx_out).toBe('settle_tx_xyz');
+      expect(after.refund_tx).toBe('settle_tx_xyz');
+      expect(after.refund_amount).toBe(BigInt(200_000_000));
 
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
         walletId: Number(row.id),
         action: 'overpayment_refund',
-        newStatus: 'refund_tx_abc',
+        newStatus: 'settle_tx_xyz',
       }));
     });
 
@@ -258,7 +260,7 @@ describe('WalletFundedProcessorService', () => {
       expect(after.refund_amount).toBeNull();
     });
 
-    it('leaves wallet funded and bumps refund_attempts when the refund tx fails (first attempt)', async () => {
+    it('leaves wallet funded and bumps refund_attempts when the combined settle fails (first attempt)', async () => {
       const row = await insertWallet({
         address: WALLET_ADDR,
         recipient: RECIPIENT_ADDR,
@@ -268,14 +270,15 @@ describe('WalletFundedProcessorService', () => {
         refund_attempts: 0,
       });
       wireFindSender(mockRpc);
-      mockRpc.sendToAddress.mockRejectedValueOnce(new Error('wallet is locked'));
+      mockRpc.sendMany.mockRejectedValueOnce(new Error('transaction rejected — coins already spent'));
 
       await service.processFunded();
 
-      expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
-      expect(mockRpc.sendToAddress).toHaveBeenCalledWith(SENDER_ADDR, expect.any(Number));
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
 
       const after = await readWallet(row.id);
+      // Stays funded → re-picked + retried next tick (self-heal), NOT error.
       expect(after.status).toBe(WalletStatus.funded);
       expect(after.refund_attempts).toBe(BigInt(1));
 
@@ -287,7 +290,7 @@ describe('WalletFundedProcessorService', () => {
 
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
         walletId: Number(row.id),
-        action: 'overpayment_refund_failed',
+        action: 'settle_retry',
       }));
     });
 
@@ -312,7 +315,7 @@ describe('WalletFundedProcessorService', () => {
       expect(after.updated_at).toBe(justNow);
     });
 
-    it('falls back to forwarding full balance after MAX_REFUND_ATTEMPTS refund failures', async () => {
+    it('escalates to error after MAX_REFUND_ATTEMPTS combined-settle failures', async () => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
       const { config } = require('../../../src/config');
       const farInThePast = new Date(Date.now() - 1000 * 60 * 60).toISOString();
@@ -326,22 +329,46 @@ describe('WalletFundedProcessorService', () => {
         updated_at: farInThePast,
       });
       wireFindSender(mockRpc);
-      mockRpc.sendToAddress
-        .mockRejectedValueOnce(new Error('wallet is still locked'))
-        .mockResolvedValueOnce('forward_tx_fallback');
+      mockRpc.sendMany.mockRejectedValueOnce(new Error('still failing'));
 
       await service.processFunded();
 
-      expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(2);
-      const forwardCall = mockRpc.sendToAddress.mock.calls[1];
-      expect(forwardCall[0]).toBe(RECIPIENT_ADDR);
-      expect(forwardCall[1]).toBeCloseTo(11.999, 3);
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
 
       const after = await readWallet(row.id);
-      expect(after.status).toBe(WalletStatus.processed);
-      expect(after.tx_out).toBe('forward_tx_fallback');
+      // Persistent failure → operator review, not an infinite retry and
+      // not a forced forward. Nothing broadcast, so no result columns.
+      expect(after.status).toBe(WalletStatus.error);
+      expect(after.refund_attempts).toBe(BigInt(config.MAX_REFUND_ATTEMPTS));
+      expect(after.tx_out).toBeNull();
       expect(after.refund_tx).toBeNull();
-      expect(after.refund_amount).toBeNull();
+    });
+
+    it('self-heals: a previously-failed combined settle succeeds on a later tick', async () => {
+      // A prior tick failed (e.g. cross-wallet "coins already spent"),
+      // left the row funded with refund_attempts=1, past the backoff
+      // window. loadFunded re-picks it and the retried sendMany lands.
+      const farInThePast = new Date(Date.now() - 1000 * 60 * 60).toISOString();
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
+        refund_attempts: 1,
+        updated_at: farInThePast,
+      });
+      wireFindSender(mockRpc);
+      mockRpc.sendMany.mockResolvedValue('settle_tx_retry');
+
+      await service.processFunded();
+
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('settle_tx_retry');
+      expect(after.refund_tx).toBe('settle_tx_retry');
       expect(after.refund_attempts).toBe(BigInt(0));
     });
 

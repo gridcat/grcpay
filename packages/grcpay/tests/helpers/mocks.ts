@@ -12,6 +12,7 @@ export function createMockRpc() {
     getReceivedByAddress: jest.fn().mockResolvedValue(0),
     setTXfee: jest.fn().mockResolvedValue(true),
     sendToAddress: jest.fn().mockResolvedValue('txid_abc123'),
+    sendMany: jest.fn().mockResolvedValue('txid_sendmany_abc123'),
     listTransactions: jest.fn().mockResolvedValue([]),
     getRawTransaction: jest.fn().mockResolvedValue({ vin: [], vout: [] }),
     validateAddress: jest.fn().mockResolvedValue({ isvalid: true }),

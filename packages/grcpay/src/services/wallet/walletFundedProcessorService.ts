@@ -226,6 +226,7 @@ export class WalletFundedProcessorServiceClass {
         walletId: Number(wallet.id),
         action: 'overpayment_refund_failed',
         newStatus: `attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS}`,
+        detail: `refund of ${refundAmountGrc} GRC to ${sender} failed: ${String(e).slice(0, 500)}`,
       });
       if (attempts >= config.MAX_REFUND_ATTEMPTS) {
         return {
@@ -548,8 +549,154 @@ export class WalletFundedProcessorServiceClass {
 
   private async processWithRecipient(fundedWallets: WalletRow[]): Promise<void> {
     log.info('Process funded wallets with recipient');
+    await this.settleRecipientLoop(fundedWallets);
+  }
+
+  // Refund the buyer's overpayment AND pay the merchant in a SINGLE
+  // sendMany — one coin selection over the shared hot-wallet pool, so
+  // the two payouts can't race each other for the same UTXO (the
+  // "coins already spent" rejection). Fee policy A: the single network
+  // fee comes off the merchant payout (merchant nets required - fee);
+  // the buyer is refunded the FULL overpayment.
+  private async settleCombined(wallet: WalletRow, sender: string): Promise<void> {
+    const recipient = wallet.recipient!;
+    const overpayment = wallet.amount_recieved - wallet.amount_required;
+    const refundGrc = Number(overpayment) / config.HALFORD;
+    const forwardGrc = Number(wallet.amount_required - minFeeHalford) / config.HALFORD;
+
+    // Aggregate by address in case the buyer is also the merchant — a
+    // sendMany map can't carry two outputs to the same key.
+    const recipients: Record<string, number> = {};
+    recipients[sender] = (recipients[sender] ?? 0) + refundGrc;
+    recipients[recipient] = (recipients[recipient] ?? 0) + forwardGrc;
+
+    // One intent marker for the whole combined settle. `settle:<id>:<ms>`
+    // — the trailing ms lets recoverInterruptedSettlements age-throttle
+    // its stalled-marker alert (branch B). On success we persist tx_out
+    // FIRST so a crash before the status flip is finished by branch A.
+    const intentMarker = `settle:${wallet.id}:${Date.now()}`;
+    const claim = await db
+      .updateTable('wallets')
+      .set({ pending_broadcast: intentMarker, updated_at: now() })
+      .where('id', '=', wallet.id)
+      .where('pending_broadcast', 'is', null)
+      .where('status', '=', WalletStatus.funded)
+      .where('tx_out', 'is', null)
+      .where('refund_tx', 'is', null)
+      .executeTakeFirst();
+    if (!claim.numUpdatedRows || Number(claim.numUpdatedRows) === 0) {
+      log.warn(`Combined settle could not claim broadcast intent for ${wallet.address} — concurrent writer.`);
+      return;
+    }
+
+    let tx: string;
+    try {
+      tx = await this.grcRpc.sendMany('', recipients);
+    } catch (e) {
+      if (e instanceof TimeoutError) {
+        // May have committed before the reply dropped — leave the marker
+        // for operator reconciliation (branch B). Re-broadcasting could
+        // double-pay BOTH the buyer and the merchant.
+        log.error(
+          `CRITICAL: combined settle sendMany for ${wallet.address} timed out — daemon `
+          + `may have committed. Marker ${intentMarker} left for operator reconciliation.`,
+        );
+        return;
+      }
+      // Pre-commit failure (e.g. cross-wallet "coins already spent"
+      // contention) — nothing broadcast. Clear the marker and bump the
+      // retry counter in one statement so the row stays `funded` and
+      // self-heals on a later tick (throttled by shouldDeferForBackoff);
+      // escalate to `error` only once retries are exhausted.
+      const attempts = Number(wallet.refund_attempts) + 1;
+      const exhausted = attempts >= config.MAX_REFUND_ATTEMPTS;
+      await db
+        .updateTable('wallets')
+        .set({
+          pending_broadcast: null,
+          refund_attempts: BigInt(attempts),
+          status: exhausted ? WalletStatus.error : WalletStatus.funded,
+          updated_at: now(),
+        })
+        .where('id', '=', wallet.id)
+        .where('pending_broadcast', '=', intentMarker)
+        .execute();
+      log.error(`Combined settle attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS} failed for ${wallet.address}: ${e}`);
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id),
+        action: exhausted ? 'status' : 'settle_retry',
+        oldStatus: WalletStatus.funded,
+        newStatus: exhausted ? WalletStatus.error : `attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS}`,
+        detail: `combined settle failed: ${String(e).slice(0, 500)}`,
+      });
+      return;
+    }
+
+    // Durable result: tx_out + refund_tx BOTH reference the single
+    // settle tx; refund_amount records the buyer's portion. Written
+    // before the status flip (crash → recovery branch A finishes it).
+    await db
+      .updateTable('wallets')
+      .set({
+        tx_out: tx,
+        refund_tx: tx,
+        refund_amount: overpayment,
+        refund_attempts: BigInt(0),
+        pending_broadcast: null,
+        updated_at: now(),
+      })
+      .where('id', '=', wallet.id)
+      .where('pending_broadcast', '=', intentMarker)
+      .execute();
+    const flip = await db
+      .updateTable('wallets')
+      .set({ status: WalletStatus.processed, updated_at: now() })
+      .where('id', '=', wallet.id)
+      .where('status', '=', WalletStatus.funded)
+      .executeTakeFirst();
+    log.info(
+      `Combined settle for ${wallet.address}: refunded ${refundGrc} GRC to ${sender}, `
+      + `forwarded ${forwardGrc} GRC to ${recipient} (tx ${tx}).`,
+    );
+    if (flip.numUpdatedRows && Number(flip.numUpdatedRows) > 0) {
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id), action: 'overpayment_refund', oldStatus: '', newStatus: tx,
+      });
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id), action: 'tx_out', oldStatus: '', newStatus: tx,
+      });
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id), action: 'status', oldStatus: WalletStatus.funded, newStatus: WalletStatus.processed,
+      });
+    }
+  }
+
+  private async settleRecipientLoop(fundedWallets: WalletRow[]): Promise<void> {
     for (const wallet of fundedWallets) {
       if (this.shouldDeferForBackoff(wallet)) continue;
+
+      // Combined settle: a refundable overpayment AND a recipient get
+      // paid in ONE sendMany (buyer's overpayment + merchant's payout,
+      // single coin selection). Two separate sends from the shared
+      // hot-wallet pool in the same tick race the daemon's coin cache
+      // ("transaction rejected — coins already spent"); one tx can't.
+      // Only the FRESH case routes here — a row with refund_tx already
+      // set is a pre-change crashed-mid-settle wallet that falls through
+      // to forward-the-remainder below. Requires required > fee so the
+      // merchant output is positive (sub-fee invoices fall through).
+      if (
+        wallet.refund_tx === null
+        && wallet.amount_recieved - wallet.amount_required > minFeeHalford
+        && wallet.amount_required > minFeeHalford
+      ) {
+        const combinedSender = await findSenderAddress(this.grcRpc, wallet.address);
+        if (combinedSender) {
+          await this.settleCombined(wallet, combinedSender);
+          continue;
+        }
+        // Sender unresolvable — fall through; the merchant keeps the
+        // overpayment as a tip (same as the standalone-refund path).
+      }
 
       const refund = await this.refundOverpaymentIfAny(wallet);
 
@@ -869,6 +1016,11 @@ export class WalletFundedProcessorServiceClass {
           action: 'status',
           oldStatus: WalletStatus.funded,
           newStatus: WalletStatus.error,
+          // Persist WHY the forward failed (e.g. "transaction rejected —
+          // coins already spent") so it's visible to read-only
+          // observers, not just in stdout. Bounded so a verbose RPC
+          // error can't bloat the row.
+          detail: `forward failed: ${String(e).slice(0, 500)}`,
         });
       }
     }

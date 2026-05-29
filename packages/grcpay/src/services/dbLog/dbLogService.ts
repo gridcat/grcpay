@@ -7,6 +7,9 @@ export interface DbLogMessage {
   action?: string;
   oldStatus?: string;
   newStatus?: string;
+  // Free-text reason, mainly the failure cause on an `error` flip
+  // (e.g. the rejected-tx message from a failed merchant forward).
+  detail?: string;
 }
 
 export class DbLogServiceClass {
@@ -27,6 +30,7 @@ export class DbLogServiceClass {
           action: data.action ?? null,
           old_status: data.oldStatus ?? null,
           new_status: data.newStatus ?? null,
+          detail: data.detail ?? null,
           created_at: now(),
         })
         .execute();

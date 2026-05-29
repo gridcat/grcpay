@@ -3,6 +3,7 @@ import { config } from '../../config';
 import { log } from '../../lib/log';
 import { db, now } from '../../lib/db';
 import { grc2halford } from '../../lib/nomination';
+import { resolveTxSender } from './senderLookup';
 
 // Size of the daemon-wide listTransactions window scanned each tick.
 // Must comfortably exceed the number of receive txs the daemon might
@@ -52,19 +53,51 @@ export class IncomingTxIndexerServiceClass {
     );
     if (!matches.length) return;
 
-    // Single multi-row INSERT with ON CONFLICT DO NOTHING — first
-    // observation wins, subsequent observations bounce off the unique
-    // (wallet_id, txid) index. One statement, one fsync. Counts are
-    // small (tens, not thousands) because the filter above already
-    // narrowed to our wallets.
+    // Only act on receives we haven't indexed yet. The same tx stays in
+    // the listTransactions window for many ticks, so without this we'd
+    // re-resolve its sender (extra RPC) every cycle. One cheap SELECT
+    // over the matched txids gives us the already-seen set.
+    const matchedTxids = matches.map((tx) => tx.txid);
+    const seen = new Set(
+      (await db
+        .selectFrom('incoming_txs')
+        .select(['wallet_id', 'txid'])
+        .where('txid', 'in', matchedTxids)
+        .execute()
+      ).map((r) => `${r.wallet_id}:${r.txid}`),
+    );
+    const fresh = matches.filter(
+      (tx) => !seen.has(`${addressToId.get(tx.address)!}:${tx.txid}`),
+    );
+    if (!fresh.length) return;
+
+    // Resolve the sender per NEW receive (listTransactions only gives
+    // the receiving address; the sender lives in the tx's inputs).
+    // Best-effort: a resolution failure stores sender_address=null
+    // rather than dropping the tx — the receive is still recorded.
     const observedAt = now();
-    const rows = matches.map((tx) => ({
-      wallet_id: addressToId.get(tx.address)!,
-      txid: tx.txid,
-      amount_halford: grc2halford(tx.amount),
-      time: BigInt(tx.time),
-      observed_at: observedAt,
-    }));
+    const rows = [];
+    for (const tx of fresh) {
+      let sender: string | null = null;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        sender = await resolveTxSender(this.grcRpc, tx.txid, tx.address);
+      } catch (e) {
+        log.warn(`Incoming-tx indexer: sender lookup failed for ${tx.txid}: ${e}`);
+      }
+      rows.push({
+        wallet_id: addressToId.get(tx.address)!,
+        txid: tx.txid,
+        amount_halford: grc2halford(tx.amount),
+        sender_address: sender,
+        time: BigInt(tx.time),
+        observed_at: observedAt,
+      });
+    }
+
+    // ON CONFLICT DO NOTHING still guards the (wallet_id, txid) unique
+    // index against a concurrent writer racing between the SELECT above
+    // and this INSERT.
     try {
       await db
         .insertInto('incoming_txs')

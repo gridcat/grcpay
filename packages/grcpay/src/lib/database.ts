@@ -112,6 +112,12 @@ interface DbLogsTable {
   action: string | null;
   old_status: string | null;
   new_status: string | null;
+  // Free-text reason for the event — primarily the failure cause when
+  // a wallet flips to `error` (e.g. the rejected-tx message from a
+  // failed merchant forward). Null for routine transitions. Persisted
+  // so read-only observers (grc-control reads this SQLite directly)
+  // see WHY, not just THAT, a wallet errored.
+  detail: string | null;
   created_at: IsoDateTime;
 }
 
@@ -130,6 +136,10 @@ interface IncomingTxsTable {
   // overpayment-refund flow can pick the sender that pushed the
   // wallet over the required amount.
   time: bigint;
+  // First non-self input address of the tx — i.e. who paid. Resolved
+  // by the indexer (vin decode) at record time. Null when resolution
+  // failed (RPC error) or the only inputs were the wallet itself.
+  sender_address: string | null;
   observed_at: IsoDateTime;
 }
 

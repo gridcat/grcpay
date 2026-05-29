@@ -18,6 +18,30 @@ interface IncomingTx {
   amountHalford: bigint;
 }
 
+/**
+ * Resolve the sender of a single tx: the first input (vin) whose
+ * prev-out address isn't the wallet itself. Returns null for a
+ * self-spend / coinbase / unresolvable inputs. Throws on RPC error
+ * (callers decide whether to skip or fail). A tx can have several
+ * input addresses; we take the first non-self one — same convention
+ * as the refund flow, which doesn't need per-output attribution.
+ */
+export async function resolveTxSender(
+  rpc: GridcoinRPC,
+  txid: string,
+  walletAddress: string,
+): Promise<string | null> {
+  const rawTx = await rpc.getRawTransaction(txid, true);
+  for (const vin of rawTx.vin) {
+    if (!vin.txid || vin.vout === undefined) continue; // skip coinbase
+    // eslint-disable-next-line no-await-in-loop
+    const inputTx = await rpc.getRawTransaction(vin.txid, true);
+    const candidate = inputTx.vout[vin.vout]?.scriptPubKey?.addresses?.[0];
+    if (candidate && candidate !== walletAddress) return candidate;
+  }
+  return null;
+}
+
 async function loadIncoming(
   rpc: GridcoinRPC,
   walletAddress: string,
@@ -110,20 +134,8 @@ export async function findAllSenders(
 
     for (const tx of incoming) {
       try {
-        const rawTx = await rpc.getRawTransaction(tx.txid, true);
-        let senderAddr: string | null = null;
-        for (const vin of rawTx.vin) {
-          if (!vin.txid || vin.vout === undefined) continue; // skip coinbase
-          const inputTx = await rpc.getRawTransaction(vin.txid, true);
-          const output = inputTx.vout[vin.vout];
-          if (output?.scriptPubKey?.addresses?.length) {
-            const candidate = output.scriptPubKey.addresses[0];
-            if (candidate !== walletAddress) {
-              senderAddr = candidate;
-              break;
-            }
-          }
-        }
+        // eslint-disable-next-line no-await-in-loop
+        const senderAddr = await resolveTxSender(rpc, tx.txid, walletAddress);
         if (!senderAddr) continue;
 
         const existing = byAddress.get(senderAddr);
