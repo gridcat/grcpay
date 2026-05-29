@@ -1,3 +1,11 @@
+# [grcpay-v1.1.1](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.0...grcpay-v1.1.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* adddress integrations test issue ([9166606](https://github.com/gridcat/grcpay/commit/91666060075c9deea8f6eaf6cb485b79bf41a1f9))
+* prevent already spent issue ([7f08316](https://github.com/gridcat/grcpay/commit/7f0831605e47fe19b241f866b0f26b236caaef5a))
+
 # [grcpay-v1.1.0](https://github.com/gridcat/grcpay/compare/grcpay-v1.0.0...grcpay-v1.1.0) (2026-05-26)
 
 
