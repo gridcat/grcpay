@@ -1,3 +1,10 @@
+# [grcpay-frontend-v1.2.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.2.0...grcpay-frontend-v1.2.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* confine refunds to confirmed txs and harden secrets/limits ([f6fe31c](https://github.com/gridcat/grcpay/commit/f6fe31c0fde8412a360977253725301814bf2de5))
+
 # [grcpay-frontend-v1.2.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.1.0...grcpay-frontend-v1.2.0) (2026-05-26)
 
 
