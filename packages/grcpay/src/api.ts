@@ -1,7 +1,6 @@
 import HttpStatus from 'http-status-codes';
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
-import methodOverride from 'method-override';
 import morgan from 'morgan';
 import { config } from './config';
 import { ErrorModel } from './models/Error';
@@ -31,15 +30,15 @@ app.set('port', config.PORT);
 // ever starts serving HTML.
 app.use(helmet());
 
-// Set up body parser in order to get post values
-app.use(express.json({ type: 'application/vnd.api+json' }));
-app.use(express.json());
+// Set up body parser in order to get post values. Explicit 100kb cap
+// (matches Express's implicit default) — every request body here is a
+// small JSON:API envelope, so bound it rather than leave it to change
+// with an Express upgrade.
+app.use(express.json({ type: 'application/vnd.api+json', limit: '100kb' }));
+app.use(express.json({ limit: '100kb' }));
 
 // Disable x-powered by
 app.disable('x-powered-by');
-
-// Allow to override PUT and DELETE methods using custom header
-app.use(methodOverride('X-HTTP-Method-Override'));
 
 // Access logs
 if (!config.isTesting) {

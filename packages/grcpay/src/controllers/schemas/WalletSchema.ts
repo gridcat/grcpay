@@ -30,7 +30,13 @@ export interface WalletData extends WalletAttributes {
 export const WalletSchema = Joi.object<WalletData>({
   type: 'wallets',
   id: Joi.any().optional(),
-  amountRequired: Joi.number().required().positive(),
+  // Floor at 2x the network fee. A sub-fee invoice would flip to
+  // `funded` on payment but then compute a negative forward amount
+  // (received - MIN_FEE < 0), fail the send, park in `error`, and
+  // strand the customer's money in the hot wallet with no refund
+  // (the amount is below the dust/fee threshold). `positive()` stays
+  // first so 0 / negative still report the "positive" message.
+  amountRequired: Joi.number().required().positive().min(config.MIN_FEE * 2),
   recipient: Joi.string().optional().length(34).pattern(
     GRC_ADDRESS_PATTERN,
     'base58 address',

@@ -177,6 +177,13 @@ interface Config {
   // Per-delivery HTTP timeout (ms). A slow receiver counts as a failed
   // attempt and is retried; it can't wedge the dispatcher.
   WEBHOOK_TIMEOUT_MS: number;
+  // Optional key for encrypting webhook signing secrets at rest
+  // (AES-256-GCM, key = SHA-256 of this string). Opt-in: unset means
+  // secrets are stored plaintext (unchanged legacy behaviour). Set it
+  // to keep the secret unreadable to anything with raw access to the
+  // SQLite file — notably grc-control's read-only mount. Legacy
+  // plaintext rows stay readable after the key is introduced.
+  WEBHOOK_SECRET_KEY?: string;
 }
 
 /**
@@ -226,6 +233,7 @@ nconf
       'WEBHOOK_MAX_ATTEMPTS',
       'WEBHOOK_RETRY_BASE_DELAY',
       'WEBHOOK_TIMEOUT_MS',
+      'WEBHOOK_SECRET_KEY',
     ],
     // nconf stores env values as strings. Parse the numeric settings
     // so downstream code can do arithmetic on them without Number(...)
@@ -251,7 +259,12 @@ nconf
     REFUND_RETRY_BASE_DELAY: 30,
     MIN_CONFIRMATIONS: 3,
     MAX_CONFIRMATION_SAMPLE: 10,
-    RATE_LIMIT_WALLET_CREATE_PER_MIN: 300,
+    // Each create mints a fresh on-chain key (getNewAddress), so this
+    // bucket also bounds wallet.dat / keypool growth from an
+    // unauthenticated caller, not just RPC load. 120/min (2/sec
+    // sustained) still covers a real integrator's burst; raise it via
+    // env for a high-volume server-to-server integrator.
+    RATE_LIMIT_WALLET_CREATE_PER_MIN: 120,
     RATE_LIMIT_WALLET_READ_PER_MIN: 1800,
     RATE_LIMIT_WALLET_DELETE_PER_MIN: 300,
     RATE_LIMIT_QR_PER_MIN: 1200,

@@ -15,6 +15,10 @@ export function createMockRpc() {
     sendMany: jest.fn().mockResolvedValue('txid_sendmany_abc123'),
     listTransactions: jest.fn().mockResolvedValue([]),
     getRawTransaction: jest.fn().mockResolvedValue({ vin: [], vout: [] }),
+    // Default to "deeply confirmed" so refund tests that don't care
+    // about confirmation depth behave as before. Tests exercising the
+    // 0-conf drain/redirect guard override this per-txid.
+    getTransaction: jest.fn().mockResolvedValue({ confirmations: 999 }),
     validateAddress: jest.fn().mockResolvedValue({ isvalid: true }),
   };
 }

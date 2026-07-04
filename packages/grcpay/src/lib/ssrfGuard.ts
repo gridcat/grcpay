@@ -110,6 +110,25 @@ function classifyIpv6(raw: string): IpClass {
     const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
     return classifyIpv4(dotted);
   }
+  // 6to4 (2002::/16) embeds an IPv4 in the 2nd+3rd hextets:
+  // 2002:AABB:CCDD:: → AA.BB.CC.DD. Without unwrapping it, a target
+  // like 2002:7f00:1:: (127.0.0.1) or a private-range embedding would
+  // tunnel straight past the classifier to 'ok'.
+  const sixToFour = ip.match(/^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4}):/);
+  if (sixToFour) {
+    const hi = parseInt(sixToFour[1], 16);
+    const lo = parseInt(sixToFour[2], 16);
+    return classifyIpv4(`${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`);
+  }
+  // NAT64 well-known prefix (64:ff9b::/96) embeds the IPv4 in the last
+  // 32 bits: 64:ff9b::AABB:CCDD → AA.BB.CC.DD (WHATWG normalizes the
+  // dotted form to this compact hex pair).
+  const nat64 = ip.match(/^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (nat64) {
+    const hi = parseInt(nat64[1], 16);
+    const lo = parseInt(nat64[2], 16);
+    return classifyIpv4(`${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`);
+  }
   if (ip === '::' || ip === '::0') return 'blocked'; // unspecified
   if (ip.startsWith('ff')) return 'blocked'; // ff00::/8 multicast
   if (ip.startsWith('2001:db8')) return 'blocked'; // documentation

@@ -7,7 +7,7 @@ import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
 import { canRetryRefund } from '../../lib/refundBackoff';
-import { MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import { halford2grc, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
 import type { WalletRow } from '../../lib/database';
 
@@ -133,7 +133,7 @@ export class WalletFundedProcessorServiceClass {
       return noRefund;
     }
 
-    const sender = await findSenderAddress(this.grcRpc, wallet.address);
+    const sender = await findSenderAddress(this.grcRpc, wallet.address, config.MIN_CONFIRMATIONS);
     if (!sender) {
       log.warn(
         `Overpayment on ${wallet.address} cannot be refunded: sender address `
@@ -142,7 +142,10 @@ export class WalletFundedProcessorServiceClass {
       return noRefund;
     }
 
-    const refundAmountGrc = Number(overpayment) / config.HALFORD - config.MIN_FEE;
+    // Convert the exact halford figure to GRC through decimal.js (one
+    // precise conversion) rather than Number(bigint)/HALFORD, which
+    // loses integer precision for halford values above 2^53.
+    const refundAmountGrc = halford2grc(overpayment - minFeeHalford).toNumber();
 
     // SIGKILL-SAFETY: pre-broadcast intent marker. Without it, a
     // crash between sendToAddress returning and the durable refund_tx
@@ -561,8 +564,8 @@ export class WalletFundedProcessorServiceClass {
   private async settleCombined(wallet: WalletRow, sender: string): Promise<void> {
     const recipient = wallet.recipient!;
     const overpayment = wallet.amount_recieved - wallet.amount_required;
-    const refundGrc = Number(overpayment) / config.HALFORD;
-    const forwardGrc = Number(wallet.amount_required - minFeeHalford) / config.HALFORD;
+    const refundGrc = halford2grc(overpayment).toNumber();
+    const forwardGrc = halford2grc(wallet.amount_required - minFeeHalford).toNumber();
 
     // Aggregate by address in case the buyer is also the merchant — a
     // sendMany map can't carry two outputs to the same key.
@@ -635,19 +638,64 @@ export class WalletFundedProcessorServiceClass {
     // Durable result: tx_out + refund_tx BOTH reference the single
     // settle tx; refund_amount records the buyer's portion. Written
     // before the status flip (crash → recovery branch A finishes it).
-    await db
-      .updateTable('wallets')
-      .set({
-        tx_out: tx,
-        refund_tx: tx,
-        refund_amount: overpayment,
-        refund_attempts: BigInt(0),
-        pending_broadcast: null,
-        updated_at: now(),
-      })
-      .where('id', '=', wallet.id)
-      .where('pending_broadcast', '=', intentMarker)
-      .execute();
+    // Guarded persist (retry + halt on permanent failure), same
+    // rationale as the single-forward path: the sendMany is already
+    // on-chain, so a failed persist must NOT let the next tick re-enter
+    // and re-broadcast — that would double-pay BOTH the buyer and the
+    // merchant. The numUpdatedRows check catches a marker cleared out
+    // from under us (would otherwise silently pass and re-broadcast).
+    let persisted = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let updateError: unknown = null;
+      let matchedRow = false;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const result = await db
+          .updateTable('wallets')
+          .set({
+            tx_out: tx,
+            refund_tx: tx,
+            refund_amount: overpayment,
+            refund_attempts: BigInt(0),
+            pending_broadcast: null,
+            updated_at: now(),
+          })
+          .where('id', '=', wallet.id)
+          .where('pending_broadcast', '=', intentMarker)
+          .executeTakeFirst();
+        matchedRow = !!result.numUpdatedRows && Number(result.numUpdatedRows) > 0;
+      } catch (e2) {
+        updateError = e2;
+      }
+      if (matchedRow) {
+        persisted = true;
+        break;
+      }
+      if (updateError) {
+        log.error(
+          `Combined settle result persist attempt ${attempt + 1}/3 failed for `
+          + `${wallet.address} (tx ${tx}): ${updateError}`,
+        );
+      } else {
+        log.error(
+          `Combined settle result persist matched 0 rows for ${wallet.address} `
+          + `(tx ${tx}, marker ${intentMarker}) — marker cleared externally. `
+          + 'Treating as persist failure.',
+        );
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => { setTimeout(r, 50 * (attempt + 1)); });
+    }
+    if (!persisted) {
+      log.error(
+        'CRITICAL: combined settle result persist failed permanently for '
+        + `${wallet.address}. tx ${tx} is on-chain. Marker ${intentMarker} left `
+        + 'in place so loadFunded skips this row; recoverInterruptedSettlements '
+        + 'reconciles on next boot. Halting process.',
+      );
+      // eslint-disable-next-line no-process-exit
+      process.exit(1);
+    }
     const flip = await db
       .updateTable('wallets')
       .set({ status: WalletStatus.processed, updated_at: now() })
@@ -689,9 +737,23 @@ export class WalletFundedProcessorServiceClass {
         && wallet.amount_recieved - wallet.amount_required > minFeeHalford
         && wallet.amount_required > minFeeHalford
       ) {
-        const combinedSender = await findSenderAddress(this.grcRpc, wallet.address);
+        const combinedSender = await findSenderAddress(
+          this.grcRpc,
+          wallet.address,
+          config.MIN_CONFIRMATIONS,
+        );
         if (combinedSender) {
-          await this.settleCombined(wallet, combinedSender);
+          try {
+            await this.settleCombined(wallet, combinedSender);
+          } catch (e) {
+            // settleCombined owns its money-critical failures (guarded
+            // persist + halt on permanent failure). A throw reaching
+            // here is a post-broadcast bookkeeping hiccup (e.g. the
+            // status flip): tx_out is already durable, so
+            // recoverInterruptedSettlements finishes the transition next
+            // tick. Log and move on so one wallet can't abort the batch.
+            log.error(`Combined settle for ${wallet.address} threw after settle: ${e}`);
+          }
           continue;
         }
         // Sender unresolvable — fall through; the merchant keeps the
@@ -751,7 +813,7 @@ export class WalletFundedProcessorServiceClass {
         //   success   → remaining = required, forward = required - fee
         //   none/abandoned → remaining = received, forward = received - fee
         const remainingHalford = wallet.amount_recieved - refund.debitedHalford;
-        const forwardAmountGrc = Number(remainingHalford - minFeeHalford) / config.HALFORD;
+        const forwardAmountGrc = halford2grc(remainingHalford - minFeeHalford).toNumber();
         tx = await this.grcRpc.sendToAddress(
           wallet.recipient!,
           forwardAmountGrc,

@@ -7,7 +7,7 @@ import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findAllSenders } from './senderLookup';
 import { canRetryRefund } from '../../lib/refundBackoff';
-import { grc2halford, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import { grc2halford, halford2grc, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
 import type { WalletRow } from '../../lib/database';
 
@@ -168,7 +168,7 @@ export class WalletExpiredProcessorServiceClass {
       return;
     }
 
-    const senders = await findAllSenders(this.grcRpc, addr);
+    const senders = await findAllSenders(this.grcRpc, addr, config.MIN_CONFIRMATIONS);
     if (!senders.length) {
       // Almost always transient: the incoming tx hasn't been indexed
       // yet, has rotated past the listTransactions fallback window, or
@@ -221,7 +221,7 @@ export class WalletExpiredProcessorServiceClass {
       }
       anyAttempted = true;
       const refundHalford = sender.amountHalford - minFeeHalford;
-      const refundAmountGrc = Number(refundHalford) / config.HALFORD;
+      const refundAmountGrc = halford2grc(refundHalford).toNumber();
 
       try {
         // eslint-disable-next-line no-await-in-loop

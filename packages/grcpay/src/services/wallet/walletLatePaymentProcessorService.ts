@@ -7,7 +7,7 @@ import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
 import { canRetryRefund } from '../../lib/refundBackoff';
-import { grc2halford, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import { grc2halford, halford2grc, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
 import type { WalletRow } from '../../lib/database';
 
@@ -69,7 +69,14 @@ export class WalletLatePaymentProcessorServiceClass {
 
     let balanceGrc: number;
     try {
-      balanceGrc = await this.grcRpc.getReceivedByAddress(wallet.address);
+      // Confirmed balance only (MIN_CONFIRMATIONS) — matching the funded
+      // and expired paths. The daemon default (minconf=1) would let a
+      // single-confirmation, still-reorg-able late payment trigger a
+      // refund out of the pooled hot wallet.
+      balanceGrc = await this.grcRpc.getReceivedByAddress(
+        wallet.address,
+        config.MIN_CONFIRMATIONS,
+      );
     } catch (e) {
       log.warn(`Failed to fetch balance for ${wallet.address}: ${e}`);
       return;
@@ -105,7 +112,7 @@ export class WalletLatePaymentProcessorServiceClass {
       return;
     }
 
-    const sender = await findSenderAddress(this.grcRpc, wallet.address);
+    const sender = await findSenderAddress(this.grcRpc, wallet.address, config.MIN_CONFIRMATIONS);
     if (!sender) {
       // No sender → bump amount_recieved so we stop spinning on the
       // same delta. Funds stay in the hot wallet for manual sweep.
@@ -122,7 +129,7 @@ export class WalletLatePaymentProcessorServiceClass {
     }
 
     const refundHalford = delta - minFeeHalford;
-    const refundGrc = Number(refundHalford) / config.HALFORD;
+    const refundGrc = halford2grc(refundHalford).toNumber();
 
     // SIGKILL-SAFETY: pre-broadcast intent marker. Without it, a
     // crash between sendToAddress returning and the persist UPDATE

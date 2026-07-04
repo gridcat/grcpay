@@ -16,6 +16,7 @@ import {
   WEBHOOK_SIGNATURE_HEADER,
 } from '../../lib/webhookSignature';
 import { nextWebhookAttemptAt } from '../../lib/webhookBackoff';
+import { decryptWebhookSecret } from '../../lib/webhookSecret';
 import { withTimeout } from '../../lib/withTimeout';
 import { WebhookDeliveryStatus } from '../../lib/database';
 import type { WebhookDeliveryRow } from '../../lib/database';
@@ -66,6 +67,11 @@ export class WebhookDispatcherServiceClass {
     const attemptNumber = Number(row.attempts) + 1;
 
     try {
+      // Decrypt the signing secret (no-op for legacy plaintext rows).
+      // Inside the try so a key/ciphertext mismatch is recorded as a
+      // delivery failure rather than crashing the dispatcher tick.
+      const signingSecret = decryptWebhookSecret(hook.secret);
+
       // Re-validate + resolve on EVERY attempt. Acceptance-time only
       // checked syntax; DNS can repoint to an internal host hours
       // later. The pinned lookup binds the socket to exactly the IP we
@@ -87,7 +93,7 @@ export class WebhookDispatcherServiceClass {
         // dedup/routing can't be fooled by header tampering on a
         // captured delivery.
         [WEBHOOK_SIGNATURE_HEADER]: webhookSignatureHeader(
-          hook.secret,
+          signingSecret,
           timestamp,
           row.event_uuid,
           attemptNumber,

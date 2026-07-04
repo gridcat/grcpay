@@ -1,3 +1,10 @@
+# Local runtime config + secrets — prod supplies RPC creds via env
+# (wallet-rpc.env), so the credential file must never be baked into
+# the image. config.example.json is the tracked placeholder.
+config.json
+.env
+.env.*
+
 # Runtime SQLite data — bind-mounted from the host at runtime,
 # never belongs in the image. Also a real blocker: the dir is
 # often root-owned from earlier container runs, which makes the

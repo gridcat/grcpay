@@ -26,7 +26,6 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/config.json ./config.json
 
 # Run as the official node:* image's built-in `node` user (uid 1000,
 # gid 1000) so a bind-mounted SQLite data dir from a typical host

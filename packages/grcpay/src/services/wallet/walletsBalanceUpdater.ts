@@ -37,7 +37,17 @@ export class WalletsBalanceUpdaterServiceClass {
       .execute();
     if (!openWallets.length) return;
 
-    await Promise.all(openWallets.map((w) => this.updateWalletBalance(w)));
+    // Bound concurrent RPC fan-out. Each wallet costs two
+    // getReceivedByAddress calls; a large open-wallet set firing them
+    // all at once (Promise.all over everything) can stampede the
+    // daemon and trip the RPC breaker. Process in fixed-size batches
+    // so peak concurrency is capped regardless of open-wallet count.
+    const CONCURRENCY = 8;
+    for (let i = 0; i < openWallets.length; i += CONCURRENCY) {
+      const batch = openWallets.slice(i, i + CONCURRENCY);
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.all(batch.map((w) => this.updateWalletBalance(w)));
+    }
   }
 
   /**

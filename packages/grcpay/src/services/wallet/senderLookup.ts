@@ -19,6 +19,28 @@ interface IncomingTx {
 }
 
 /**
+ * Live confirmation depth for a tx, from the daemon. Returns 0 (i.e.
+ * "treat as unconfirmed") on any RPC failure or a missing/negative
+ * confirmations field. Fail-CLOSED on purpose: this gates real money
+ * leaving the pooled hot wallet, so "couldn't prove it's confirmed"
+ * must mean "don't refund it" rather than "assume it's fine". A
+ * transient RPC hiccup just defers the refund to a later tick (the
+ * refund processors already retry under backoff); the alternative —
+ * refunding an unconfirmed, double-spendable deposit — drains the pool.
+ */
+async function confirmationsFor(rpc: GridcoinRPC, txid: string): Promise<number> {
+  try {
+    const tx = await rpc.getTransaction(txid);
+    return typeof tx.confirmations === 'number' && tx.confirmations > 0
+      ? tx.confirmations
+      : 0;
+  } catch (e) {
+    log.warn(`Sender lookup: confirmation check failed for ${txid}, treating as unconfirmed: ${e}`);
+    return 0;
+  }
+}
+
+/**
  * Resolve the sender of a single tx: the first input (vin) whose
  * prev-out address isn't the wallet itself. Returns null for a
  * self-spend / coinbase / unresolvable inputs. Throws on RPC error
@@ -96,8 +118,18 @@ async function loadIncoming(
  * (iterates ALL senders — each gets back what they sent, minus the
  * per-sender fee).
  *
+ * CONFIRMATION GATE: only incoming txs at or above `minConfirmations`
+ * blocks are counted. The indexer records every receive, including
+ * 0-conf mempool txs, so without this gate an attacker could seed a
+ * large unconfirmed deposit, let the refund pay it out of the pooled
+ * hot wallet, then double-spend the original — and a later dust deposit
+ * could hijack the "latest sender" refund target. Refunds must only
+ * ever act on confirmed, non-reversible money, so both the refunded
+ * AMOUNT and the "latest sender" DESTINATION are derived from confirmed
+ * txs only.
+ *
  * Returns an empty array if:
- *   - nothing was received at this address
+ *   - nothing confirmed was received at this address
  *   - every resolvable input is the wallet itself (self-spend)
  *   - any RPC call throws
  *
@@ -118,9 +150,23 @@ async function loadIncoming(
 export async function findAllSenders(
   rpc: GridcoinRPC,
   walletAddress: string,
+  minConfirmations: number,
 ): Promise<SenderShare[]> {
   try {
-    const incoming = await loadIncoming(rpc, walletAddress);
+    const allIncoming = await loadIncoming(rpc, walletAddress);
+    if (!allIncoming.length) {
+      return [];
+    }
+
+    // Drop anything below the confirmation threshold BEFORE any amount
+    // or sender attribution. Re-checked live every call so a reorg that
+    // undoes a previously-confirmed deposit is reflected immediately.
+    const incoming: IncomingTx[] = [];
+    for (const tx of allIncoming) {
+      // eslint-disable-next-line no-await-in-loop
+      const confs = await confirmationsFor(rpc, tx.txid);
+      if (confs >= minConfirmations) incoming.push(tx);
+    }
     if (!incoming.length) {
       return [];
     }
@@ -169,13 +215,15 @@ export async function findAllSenders(
  * Convenience wrapper for callers that just want the single most-recent
  * sender (the overpayment-refund flow — user policy is to refund the
  * latest contributor, the one whose payment pushed the wallet past the
- * required amount).
+ * required amount). Only CONFIRMED senders are considered, so a 0-conf
+ * dust deposit can't hijack the refund destination.
  */
 export async function findSenderAddress(
   rpc: GridcoinRPC,
   walletAddress: string,
+  minConfirmations: number,
 ): Promise<string | null> {
-  const senders = await findAllSenders(rpc, walletAddress);
+  const senders = await findAllSenders(rpc, walletAddress, minConfirmations);
   if (!senders.length) return null;
   return senders[senders.length - 1].address;
 }

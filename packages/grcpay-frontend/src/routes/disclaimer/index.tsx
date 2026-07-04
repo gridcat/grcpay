@@ -20,7 +20,7 @@ import { breadcrumbList } from '@/lib/structuredData';
 import { NextMuiLink } from '@/components/NextMuiLink';
 import { Contents } from './Contents';
 
-const CONTACT_EMAIL = 'gridcat@gridcoin.club';
+const CONTACT_EMAIL = 'gridcat@proton.me';
 const GOVERNING_LAW = '[Operator’s principal place of business]';
 const EFFECTIVE_DATE = '2026-05-07';
 

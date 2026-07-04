@@ -1,8 +1,8 @@
 // Webhook-aware WalletSchema cases. Config is mocked so we can toggle
-// the feature flag; the other WalletSchema rules don't read config so
-// this mock doesn't affect them (they're covered in WalletSchema.spec).
+// the feature flag. MIN_FEE is included because the amountRequired rule
+// floors at 2x MIN_FEE (evaluated when the schema is built).
 jest.mock('../../../src/config', () => ({
-  config: { WEBHOOKS_ENABLED: true, WEBHOOK_ALLOW_PRIVATE: false },
+  config: { WEBHOOKS_ENABLED: true, WEBHOOK_ALLOW_PRIVATE: false, MIN_FEE: 0.001 },
 }));
 
 // eslint-disable-next-line import/first

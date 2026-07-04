@@ -6,6 +6,7 @@ import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { grc2halford } from '../../lib/nomination';
 import { generateToken, hashToken } from '../../lib/walletToken';
+import { encryptWebhookSecret } from '../../lib/webhookSecret';
 
 export class WalletsCreatorServiceClass {
   constructor(
@@ -106,7 +107,9 @@ export class WalletsCreatorServiceClass {
           .values({
             wallet_id: walletRow.id,
             url: webhookUrl,
-            secret: webhookSecret,
+            // Encrypted at rest when WEBHOOK_SECRET_KEY is set; the raw
+            // value is still revealed once to the caller below.
+            secret: encryptWebhookSecret(webhookSecret),
             created_at: timestamp,
             updated_at: timestamp,
           })

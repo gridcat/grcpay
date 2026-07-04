@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { RatesService } from '../services/rates/ratesService';
 import { ErrorModel } from '../models/Error';
 import { ratesRateLimiter } from '../middleware/rateLimit';
+import { log } from '../lib/log';
 
 export const ratesRouter = Router();
 
@@ -29,9 +30,16 @@ ratesRouter.get('/:currency', async (req: Request, res: Response) => {
       },
     });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
+    // Don't echo the upstream/axios message to the client (it leaks
+    // CoinGecko/infra detail). Log it server-side; return a generic
+    // 400 — the only client-actionable case here is an unsupported
+    // currency.
+    log.warn(`Rate lookup failed for '${req.params.currency}': ${e}`);
     res.status(StatusCodes.BAD_REQUEST).send({
-      errors: [new ErrorModel(StatusCodes.BAD_REQUEST, message)],
+      errors: [new ErrorModel(
+        StatusCodes.BAD_REQUEST,
+        'Currency not supported or temporarily unavailable',
+      )],
     });
   }
 });
@@ -51,9 +59,12 @@ ratesRouter.get('/', async (_req: Request, res: Response) => {
       },
     });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
+    log.error(`Supported-currencies lookup failed: ${e}`);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).send({
-      errors: [new ErrorModel(StatusCodes.INTERNAL_SERVER_ERROR, message)],
+      errors: [new ErrorModel(
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        'Rates are temporarily unavailable',
+      )],
     });
   }
 });

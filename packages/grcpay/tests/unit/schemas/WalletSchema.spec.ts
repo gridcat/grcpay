@@ -60,6 +60,13 @@ describe('WalletSchema', () => {
       expect(error!.message).toMatch(/positive/);
     });
 
+    it('rejects a sub-fee amountRequired that would strand funds', () => {
+      // Below 2x MIN_FEE (0.001 GRC) — a wallet that can never forward a
+      // positive amount to the merchant after the network fee.
+      const { error } = WalletSchema.validate({ ...validData, amountRequired: 0.0005 });
+      expect(error).toBeDefined();
+    });
+
     it('rejects wrong type', () => {
       const { error } = WalletSchema.validate({ ...validData, type: 'other' });
       expect(error).toBeDefined();

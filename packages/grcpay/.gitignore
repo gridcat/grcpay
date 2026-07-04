@@ -72,6 +72,10 @@ typings/
 .env
 .env.test
 
+# Local runtime config (RPC creds etc.) — supplied via env in prod.
+# Never track this; commit config.example.json instead.
+config.json
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 
