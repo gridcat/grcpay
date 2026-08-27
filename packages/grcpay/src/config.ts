@@ -95,11 +95,6 @@ interface Config {
   // to unlock the wallet before MAX_REFUND_ATTEMPTS is reached
   // (locked wallet is the usual cause of refund failure).
   REFUND_RETRY_BASE_DELAY: number;
-  // How often (seconds) the reconciliation job re-reads the fee the
-  // daemon actually charged for each broadcast, and reports how far
-  // above the network minimum grcpay's transactions have run. Pure
-  // observability. Set to 0 to disable.
-  RECONCILE_INTERVAL: number;
   // Minimum number of block confirmations required before a customer's
   // payment counts toward the wallet's settled balance. The balance
   // updater calls getReceivedByAddress(address, MIN_CONFIRMATIONS) and
@@ -253,7 +248,6 @@ nconf
       'WEBHOOK_RETRY_BASE_DELAY',
       'WEBHOOK_TIMEOUT_MS',
       'WEBHOOK_SECRET_KEY',
-      'RECONCILE_INTERVAL',
     ],
     // nconf stores env values as strings. Parse the numeric settings
     // so downstream code can do arithmetic on them without Number(...)
@@ -301,7 +295,6 @@ nconf
     WEBHOOK_MAX_ATTEMPTS: 6,
     WEBHOOK_RETRY_BASE_DELAY: 30,
     WEBHOOK_TIMEOUT_MS: 10_000,
-    RECONCILE_INTERVAL: 60 * 60, // 1 hour
   });
 
 // Check required settings.
@@ -355,7 +348,6 @@ const NUMERIC_KEYS = [
   'WEBHOOK_MAX_ATTEMPTS',
   'WEBHOOK_RETRY_BASE_DELAY',
   'WEBHOOK_TIMEOUT_MS',
-  'RECONCILE_INTERVAL',
 ];
 for (const key of NUMERIC_KEYS) {
   const raw = nconf.get(key);

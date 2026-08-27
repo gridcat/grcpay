@@ -27,21 +27,12 @@ export function createMockRpc() {
     //
     // `fee` is NEGATIVE, matching the daemon: gettransaction computes
     // `nFee = wtx.GetValueOut() - nDebit` and pushes it unnegated
-    // (rpcwallet.cpp). The fee ledger normalises with Math.abs; a mock
-    // that returned a positive fee would hide a sign bug.
+    // (rpcwallet.cpp).
     getTransaction: vi.fn().mockResolvedValue({ confirmations: 999, fee: -0.001 }),
     // NOT what the forward gates on — see getWalletInfo above.
     listUnspent: vi.fn().mockResolvedValue([]),
-    createRawTransaction: vi.fn().mockResolvedValue('00'.repeat(96)),
-    signRawTransaction: vi.fn().mockResolvedValue({
-      hex: '00'.repeat(192),
-      complete: true,
-    }),
-    sendRawTransaction: vi.fn().mockResolvedValue('txid_raw_abc123'),
-    // `ismine` matters to the consolidation sweep, which refuses to
-    // send the operator float to an address this wallet does not
-    // control. Default to a wallet-owned address; the refusal path
-    // overrides it per-test.
+    // Recipient validation on wallet creation. Default to a valid
+    // address; the rejection paths override it per-test.
     validateAddress: vi.fn().mockResolvedValue({ isvalid: true, ismine: true }),
   };
 }
