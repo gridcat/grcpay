@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { generateToken, hashToken, tokenMatches } from '../../../src/lib/walletToken';
 
 describe('walletToken', () => {

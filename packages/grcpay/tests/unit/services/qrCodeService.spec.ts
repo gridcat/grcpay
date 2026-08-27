@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { QrCodeServiceClass } from '../../../src/services/qr/qrCodeService';
 import { Wallet, WalletStatus } from '../../../src/models/Wallet';
 

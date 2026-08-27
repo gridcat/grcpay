@@ -1,3 +1,4 @@
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { WalletsFinderServiceClass } from '../../../src/services/wallet/walletFinderService';
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 

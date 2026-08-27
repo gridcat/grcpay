@@ -1,12 +1,13 @@
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import supertest from 'supertest';
 
-jest.mock('../../../src/lib/gridcoin', () => ({
+vi.mock('../../../src/lib/gridcoin', () => ({
   rpc: {
-    getWalletInfo: jest.fn(),
-    getNewAddress: jest.fn(),
-    getReceivedByAddress: jest.fn(),
+    getWalletInfo: vi.fn(),
+    getNewAddress: vi.fn(),
+    getReceivedByAddress: vi.fn(),
   },
-  connect: jest.fn().mockResolvedValue(true),
+  connect: vi.fn().mockResolvedValue(true),
 }));
 
 // eslint-disable-next-line import/first

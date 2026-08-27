@@ -1,8 +1,10 @@
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+
 // config is mocked so individual tests can flip WEBHOOK_ALLOW_PRIVATE.
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   config: { WEBHOOK_ALLOW_PRIVATE: false },
 }));
-jest.mock('dns', () => ({ lookup: jest.fn() }));
+vi.mock('dns', () => ({ lookup: vi.fn() }));
 
 import { lookup } from 'dns';
 // eslint-disable-next-line import/first
@@ -15,7 +17,7 @@ import {
 // eslint-disable-next-line import/first
 import { config } from '../../../src/config';
 
-const mockLookup = lookup as unknown as jest.Mock;
+const mockLookup = lookup as unknown as Mock;
 
 function resolvesTo(...addresses: { address: string; family: number }[]): void {
   mockLookup.mockImplementation((_host: string, _opts: unknown, cb: Function) => {
@@ -25,7 +27,7 @@ function resolvesTo(...addresses: { address: string; family: number }[]): void {
 
 describe('ssrfGuard', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     (config as { WEBHOOK_ALLOW_PRIVATE: boolean }).WEBHOOK_ALLOW_PRIVATE = false;
   });
 
@@ -119,22 +121,26 @@ describe('ssrfGuard', () => {
   });
 
   describe('createPinnedLookup', () => {
-    it('always yields the pinned IP (callback form)', (done) => {
-      const pinned = createPinnedLookup('1.2.3.4', 4);
-      pinned('whatever.host', {}, (err, address, family) => {
-        expect(err).toBeNull();
-        expect(address).toBe('1.2.3.4');
-        expect(family).toBe(4);
-        done();
+    it('always yields the pinned IP (callback form)', async () => {
+      await new Promise<void>((resolve) => {
+        const pinned = createPinnedLookup('1.2.3.4', 4);
+        pinned('whatever.host', {}, (err, address, family) => {
+          expect(err).toBeNull();
+          expect(address).toBe('1.2.3.4');
+          expect(family).toBe(4);
+          resolve();
+        });
       });
     });
 
-    it('supports the {all:true} form', (done) => {
-      const pinned = createPinnedLookup('5.6.7.8', 4);
-      pinned('whatever.host', { all: true }, (err: Error | null, addrs: unknown) => {
-        expect(err).toBeNull();
-        expect(addrs).toEqual([{ address: '5.6.7.8', family: 4 }]);
-        done();
+    it('supports the {all:true} form', async () => {
+      await new Promise<void>((resolve) => {
+        const pinned = createPinnedLookup('5.6.7.8', 4);
+        pinned('whatever.host', { all: true }, (err: Error | null, addrs: unknown) => {
+          expect(err).toBeNull();
+          expect(addrs).toEqual([{ address: '5.6.7.8', family: 4 }]);
+          resolve();
+        });
       });
     });
   });

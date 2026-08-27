@@ -1,12 +1,13 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import supertest from 'supertest';
 import axios from 'axios';
 
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+vi.mock('axios');
+const mockedAxios = vi.mocked(axios);
 
-jest.mock('../../../src/lib/gridcoin', () => ({
-  rpc: { getWalletInfo: jest.fn() },
-  connect: jest.fn().mockResolvedValue(true),
+vi.mock('../../../src/lib/gridcoin', () => ({
+  rpc: { getWalletInfo: vi.fn() },
+  connect: vi.fn().mockResolvedValue(true),
 }));
 
 // eslint-disable-next-line import/first
@@ -19,7 +20,7 @@ const request = supertest(app);
 describe('GET /rates/:currency', () => {
   beforeAll(setupTestDb);
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('returns rate for a valid currency', async () => {

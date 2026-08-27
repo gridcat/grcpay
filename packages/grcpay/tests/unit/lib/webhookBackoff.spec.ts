@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { nextWebhookAttemptAt } from '../../../src/lib/webhookBackoff';
 import { config } from '../../../src/config';
 

@@ -1,3 +1,4 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   WebhookEnqueueServiceClass,
   isWebhookWorthy,
@@ -43,7 +44,7 @@ describe('WebhookEnqueueService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     mockEmitter = createMockEventEmitter();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,7 +110,7 @@ describe('WebhookEnqueueService', () => {
   it('is idempotent: a duplicate transition enqueues exactly once and never throws', async () => {
     const wallet = await insertWallet();
     await addWebhook(wallet.id);
-    const errorSpy = jest.spyOn(log, 'error');
+    const errorSpy = vi.spyOn(log, 'error');
 
     for (let i = 0; i < 3; i += 1) {
       mockEmitter.emit('log', {

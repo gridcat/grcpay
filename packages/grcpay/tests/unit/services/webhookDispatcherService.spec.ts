@@ -1,7 +1,11 @@
-jest.mock('axios', () => ({ __esModule: true, default: { post: jest.fn() } }));
-jest.mock('../../../src/lib/ssrfGuard', () => {
-  const actual = jest.requireActual('../../../src/lib/ssrfGuard');
-  return { ...actual, assertSafeWebhookUrl: jest.fn() };
+import { beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+
+vi.mock('axios', () => ({ default: { post: vi.fn() } }));
+vi.mock('../../../src/lib/ssrfGuard', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/lib/ssrfGuard')>(
+    '../../../src/lib/ssrfGuard',
+  );
+  return { ...actual, assertSafeWebhookUrl: vi.fn() };
 });
 
 import axios from 'axios';
@@ -18,8 +22,8 @@ import { db, now } from '../../../src/lib/db';
 // eslint-disable-next-line import/first
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
-const mockedPost = (axios as unknown as { post: jest.Mock }).post;
-const mockedAssert = assertSafeWebhookUrl as jest.Mock;
+const mockedPost = (axios as unknown as { post: Mock }).post;
+const mockedAssert = assertSafeWebhookUrl as Mock;
 
 const SECRET = 'top-secret';
 
@@ -66,7 +70,7 @@ describe('WebhookDispatcherService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     service = new WebhookDispatcherServiceClass();
     mockedAssert.mockResolvedValue({

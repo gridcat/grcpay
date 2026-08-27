@@ -1,3 +1,4 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import supertest from 'supertest';
 import { hashToken } from '../../../src/lib/walletToken';
 import { WalletStatus } from '../../../src/models/Wallet';
@@ -5,19 +6,19 @@ import { WalletStatus } from '../../../src/models/Wallet';
 const VALID_TOKEN = 'integration-test-token-raw-value';
 const VALID_TOKEN_HASH = hashToken(VALID_TOKEN);
 
-const mockRpc = {
-  getWalletInfo: jest.fn(),
-  getNewAddress: jest.fn().mockResolvedValue('Snew_address_567890abcdefghijklm12'),
-  keyPoolRefill: jest.fn(),
-  getReceivedByAddress: jest.fn().mockResolvedValue(0),
-  setTXfee: jest.fn(),
-  sendToAddress: jest.fn(),
-  validateAddress: jest.fn().mockResolvedValue({ isvalid: true }),
-};
+const mockRpc = vi.hoisted(() => ({
+  getWalletInfo: vi.fn(),
+  getNewAddress: vi.fn().mockResolvedValue('Snew_address_567890abcdefghijklm12'),
+  keyPoolRefill: vi.fn(),
+  getReceivedByAddress: vi.fn().mockResolvedValue(0),
+  setTXfee: vi.fn(),
+  sendToAddress: vi.fn(),
+  validateAddress: vi.fn().mockResolvedValue({ isvalid: true }),
+}));
 
-jest.mock('../../../src/lib/gridcoin', () => ({
+vi.mock('../../../src/lib/gridcoin', () => ({
   rpc: mockRpc,
-  connect: jest.fn().mockResolvedValue(true),
+  connect: vi.fn().mockResolvedValue(true),
 }));
 
 // eslint-disable-next-line import/first
@@ -32,7 +33,7 @@ const request = supertest(app);
 describe('POST /wallets', () => {
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     mockRpc.getNewAddress.mockResolvedValue('Snew_address_567890abcdefghijklm12');
     mockRpc.validateAddress.mockResolvedValue({ isvalid: true });
@@ -129,7 +130,7 @@ describe('POST /wallets', () => {
 describe('GET /wallets/:address', () => {
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
   });
 
@@ -189,7 +190,7 @@ describe('GET /wallets/:address', () => {
 describe('DELETE /wallets/:address', () => {
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
   });
 
@@ -250,7 +251,7 @@ describe('DELETE /wallets/:address', () => {
 describe('GET /wallets/:address/qr', () => {
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
   });
 
