@@ -25,10 +25,9 @@ interface InsertWalletOverrides {
 let migrated = false;
 
 /**
- * Idempotent migration of the in-memory test DB. Each Jest worker
- * runs in a single process (--runInBand) so the better-sqlite3
- * `:memory:` connection is shared across test files; migrating once
- * is enough.
+ * Idempotent migration of the in-memory test DB. Each Vitest worker
+ * gets its own better-sqlite3 `:memory:` connection, so migrating once
+ * per worker is enough.
  */
 export async function setupTestDb(): Promise<void> {
   if (migrated) return;

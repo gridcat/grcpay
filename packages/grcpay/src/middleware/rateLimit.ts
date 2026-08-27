@@ -16,7 +16,7 @@ import { ErrorModel } from '../models/Error';
 export function createRateLimiter(windowMs: number, maxRequests: number) {
   const requests = new Map<string, number[]>();
 
-  // `.unref()` so the timer doesn't pin the event loop (or Jest) open.
+  // `.unref()` so the timer doesn't pin the event loop (or Vitest) open.
   setInterval(() => {
     const cutoff = Date.now() - windowMs;
     requests.forEach((timestamps, ip) => {

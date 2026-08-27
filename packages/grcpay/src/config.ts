@@ -76,6 +76,18 @@ interface Config {
   // the merchant instead. Protects against a permanently
   // locked or unreachable wallet wedging the job loop.
   MAX_REFUND_ATTEMPTS: number;
+  // Max number of merchant-forward RPC failures before the funded
+  // processor parks the wallet in `error` for expiry/refund rescue.
+  // Kept separate from MAX_REFUND_ATTEMPTS because a newly-arrived
+  // payment can take materially longer to become daemon-spendable.
+  FORWARD_RETRY_MAX_ATTEMPTS: number;
+  // Ceiling (seconds) on the re-expiry backoff for `error` wallets that
+  // burned their refund budget but still hold customer money. Without a
+  // cap the doubling interval reaches years and the funds are stranded
+  // in all but name; with it a stuck wallet retries quietly at this
+  // cadence until the daemon can finally send. 1h is low enough to
+  // recover the same day, high enough that churn is irrelevant.
+  RESCUE_MAX_INTERVAL: number;
   // Exponential-backoff base (seconds) between refund retries.
   // Attempt N is gated by REFUND_RETRY_BASE_DELAY * 2^(N-1)
   // seconds since the last update, so the default 30s yields
@@ -83,6 +95,11 @@ interface Config {
   // to unlock the wallet before MAX_REFUND_ATTEMPTS is reached
   // (locked wallet is the usual cause of refund failure).
   REFUND_RETRY_BASE_DELAY: number;
+  // How often (seconds) the reconciliation job re-reads the fee the
+  // daemon actually charged for each broadcast, and reports how far
+  // above the network minimum grcpay's transactions have run. Pure
+  // observability. Set to 0 to disable.
+  RECONCILE_INTERVAL: number;
   // Minimum number of block confirmations required before a customer's
   // payment counts toward the wallet's settled balance. The balance
   // updater calls getReceivedByAddress(address, MIN_CONFIRMATIONS) and
@@ -215,6 +232,8 @@ nconf
       'LATE_PAYMENT_WINDOW',
       'LATE_PAYMENT_CHECK_INTERVAL',
       'MAX_REFUND_ATTEMPTS',
+      'FORWARD_RETRY_MAX_ATTEMPTS',
+      'RESCUE_MAX_INTERVAL',
       'REFUND_RETRY_BASE_DELAY',
       'MIN_CONFIRMATIONS',
       'MAX_CONFIRMATION_SAMPLE',
@@ -234,6 +253,7 @@ nconf
       'WEBHOOK_RETRY_BASE_DELAY',
       'WEBHOOK_TIMEOUT_MS',
       'WEBHOOK_SECRET_KEY',
+      'RECONCILE_INTERVAL',
     ],
     // nconf stores env values as strings. Parse the numeric settings
     // so downstream code can do arithmetic on them without Number(...)
@@ -256,6 +276,8 @@ nconf
     LATE_PAYMENT_WINDOW: 60 * 60 * 24 * 7, // 7 days
     LATE_PAYMENT_CHECK_INTERVAL: 60 * 60, // 1 hour
     MAX_REFUND_ATTEMPTS: 5,
+    FORWARD_RETRY_MAX_ATTEMPTS: 7,
+    RESCUE_MAX_INTERVAL: 60 * 60, // 1 hour
     REFUND_RETRY_BASE_DELAY: 30,
     MIN_CONFIRMATIONS: 3,
     MAX_CONFIRMATION_SAMPLE: 10,
@@ -279,6 +301,7 @@ nconf
     WEBHOOK_MAX_ATTEMPTS: 6,
     WEBHOOK_RETRY_BASE_DELAY: 30,
     WEBHOOK_TIMEOUT_MS: 10_000,
+    RECONCILE_INTERVAL: 60 * 60, // 1 hour
   });
 
 // Check required settings.
@@ -314,6 +337,8 @@ const NUMERIC_KEYS = [
   'LATE_PAYMENT_WINDOW',
   'LATE_PAYMENT_CHECK_INTERVAL',
   'MAX_REFUND_ATTEMPTS',
+  'FORWARD_RETRY_MAX_ATTEMPTS',
+  'RESCUE_MAX_INTERVAL',
   'REFUND_RETRY_BASE_DELAY',
   'MIN_CONFIRMATIONS',
   'MAX_CONFIRMATION_SAMPLE',
@@ -330,6 +355,7 @@ const NUMERIC_KEYS = [
   'WEBHOOK_MAX_ATTEMPTS',
   'WEBHOOK_RETRY_BASE_DELAY',
   'WEBHOOK_TIMEOUT_MS',
+  'RECONCILE_INTERVAL',
 ];
 for (const key of NUMERIC_KEYS) {
   const raw = nconf.get(key);
