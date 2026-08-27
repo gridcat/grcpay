@@ -812,10 +812,28 @@ export class WalletFundedProcessorServiceClass {
       //     getreceivedbyaddress(addr, 3) = 1.0   -> we call it funded
       //     getunconfirmedbalance         = 1.0   -> daemon: untrusted
       //     getbalance                    = 0.0   -> sendtoaddress fails
-      // getWalletInfo().balance IS the daemon's GetBalance(), the same
-      // figure sendtoaddress checks first. (Only its FIRST check: coin
-      // selection can still fail later — that is what the marker-
-      // protected retry path below is for.)
+      // getWalletInfo().balance IS the daemon's GetBalance(), and
+      // GetBalance() is precisely what the send path pre-checks:
+      // SendMoneyToDestination opens with
+      // `if (nValue + nTransactionFee > GetBalance()) return
+      // _("Insufficient funds")` (wallet.cpp). Gate on the same number
+      // it does.
+      //
+      // Do NOT "improve" this into a listunspent sum. The daemon carries
+      // two different depth rules, seven blocks apart:
+      //     GetBalance()  -> IsTrusted() && (IsConfirmed() || fFromMe)
+      //                      IsConfirmed() is `depth >= 10`
+      //     SelectCoins() -> AvailableCoins(fOnlyConfirmed = true)
+      //                      IsTrusted() is `depth >= 3`
+      // A customer payment has fFromMe = false, so listunspent 3 reports
+      // it spendable at depth 3 while getbalance withholds it until 10.
+      // Coin selection would indeed take it — but the RPC never reaches
+      // coin selection, because the GetBalance() pre-check rejects the
+      // call first. Tried on live testnet at depth 8: listunspent 3 said
+      // 14.726 available, and all three sends still died on
+      // "Insufficient funds" until depth 10 landed.
+      // (Only the first check: coin selection can still fail later —
+      // that is what the marker-protected retry path below is for.)
       //
       // The deadline is computed BEFORE the probe on purpose. `funded` is
       // invisible to expireWallets, so any path that skips the liveness

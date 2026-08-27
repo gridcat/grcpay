@@ -7,10 +7,11 @@ import { vi } from 'vitest';
 
 export function createMockRpc() {
   return {
-    // `balance` is the daemon's GetBalance() — the trusted, spendable
-    // figure sendtoaddress checks, and what the funded processor gates
-    // the merchant forward on. Default is comfortably above every
-    // amount the suite uses so the gate is a no-op unless overridden.
+    // `balance` is the daemon's GetBalance() — the figure sendtoaddress
+    // pre-checks before it will spend anything, and what the funded
+    // processor gates the merchant forward on. Default is comfortably
+    // above every amount the suite uses so the gate is a no-op unless
+    // overridden.
     getWalletInfo: vi.fn().mockResolvedValue({ balance: 1_000_000 }),
     getNewAddress: vi.fn().mockResolvedValue('S1234567890abcdef1234567890abcdef12'),
     keyPoolRefill: vi.fn().mockResolvedValue(null),
@@ -29,9 +30,7 @@ export function createMockRpc() {
     // (rpcwallet.cpp). The fee ledger normalises with Math.abs; a mock
     // that returned a positive fee would hide a sign bug.
     getTransaction: vi.fn().mockResolvedValue({ confirmations: 999, fee: -0.001 }),
-    // Raw-transaction path (SEND_MODE=exact). Defaults describe a
-    // single-UTXO payment address: one input, one output, ~192 bytes
-    // signed, so requiredFeeHalford() lands on the 0.001 base fee.
+    // NOT what the forward gates on — see getWalletInfo above.
     listUnspent: vi.fn().mockResolvedValue([]),
     createRawTransaction: vi.fn().mockResolvedValue('00'.repeat(96)),
     signRawTransaction: vi.fn().mockResolvedValue({

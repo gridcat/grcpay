@@ -544,6 +544,42 @@ describe('WalletFundedProcessorService', () => {
       expect(after.tx_out).toBe('tx_after_maturity');
     });
 
+    it('gates on getbalance, not on the deeper listunspent set', async () => {
+      // Regression from a live testnet run that got this backwards.
+      // The daemon carries two depth rules, seven blocks apart:
+      //   GetBalance()  -> IsTrusted() && (IsConfirmed() || fFromMe)
+      //                    IsConfirmed() is `depth >= 10`
+      //   SelectCoins() -> AvailableCoins(fOnlyConfirmed = true)
+      //                    IsTrusted() is `depth >= 3`
+      // A customer payment has fFromMe = false, so listunspent 3 calls it
+      // spendable at depth 3 while getbalance withholds it until 10. Coin
+      // selection would take it — but sendtoaddress never gets there:
+      // SendMoneyToDestination pre-checks
+      // `nValue + nTransactionFee > GetBalance()` and bails first.
+      // Gating on the wider set produced real "Insufficient funds" sends
+      // on testnet at depth 8. Wait for the number the RPC checks.
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      // Coin selection would happily spend these...
+      mockRpc.listUnspent.mockResolvedValue([
+        { txid: 'utxo_depth_3', vout: 0, amount: 20, confirmations: 3 },
+      ]);
+      // ...but the RPC's own pre-check still says no.
+      mockRpc.getWalletInfo.mockResolvedValue({ balance: 0 });
+
+      await service.processFunded();
+
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+      expect((await readWallet(row.id)).status).toBe(WalletStatus.funded);
+      // Untouched: no attempt spent, nothing to back off from.
+      expect((await readWallet(row.id)).refund_attempts).toBe(BigInt(0));
+    });
+
     it('waits when the balance probe itself fails, without touching the row', async () => {
       // A daemon outage must not escape the per-wallet loop (that would
       // abort the tick for every remaining wallet) and must not mutate
