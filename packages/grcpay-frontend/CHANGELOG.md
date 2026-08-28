@@ -1,3 +1,16 @@
+# [grcpay-frontend-v1.3.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.2.1...grcpay-frontend-v1.3.0) (2026-08-28)
+
+
+### Bug Fixes
+
+* color pallette issue ([96ea175](https://github.com/gridcat/grcpay/commit/96ea175a98522d02c759d31aa0f06f1e7578c1f0))
+* dependencies tree ([f9c19ba](https://github.com/gridcat/grcpay/commit/f9c19baea4950ecaa0aa5685447f2b9fb837686a))
+
+
+### Features
+
+* upgrade logo ([30c0402](https://github.com/gridcat/grcpay/commit/30c040225ad3b8789fc855eb9e825f7d33e8264c))
+
 # [grcpay-frontend-v1.2.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.2.0...grcpay-frontend-v1.2.1) (2026-07-04)
 
 
