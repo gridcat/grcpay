@@ -12,9 +12,9 @@
   "node": ">=22.0.0",
   "nx": {},
   "overrides": {
-    "axios": "^1.16.0",
+    "axios": "^1.18.0",
     "follow-redirects": "^1.16.0",
-    "postcss": "^8.5.14"
+    "postcss": "^8.5.23"
   },
   "packageManager": "npm@10.9.0",
   "private": true,

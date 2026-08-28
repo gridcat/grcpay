@@ -1,3 +1,4 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { findAllSenders, findSenderAddress } from '../../../src/services/wallet/senderLookup';
 import { createMockRpc } from '../../helpers/mocks';
 import { config } from '../../../src/config';
@@ -60,7 +61,7 @@ describe('senderLookup confirmation discipline', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     mockRpc = createMockRpc();
   });

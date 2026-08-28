@@ -76,6 +76,18 @@ interface Config {
   // the merchant instead. Protects against a permanently
   // locked or unreachable wallet wedging the job loop.
   MAX_REFUND_ATTEMPTS: number;
+  // Max number of merchant-forward RPC failures before the funded
+  // processor parks the wallet in `error` for expiry/refund rescue.
+  // Kept separate from MAX_REFUND_ATTEMPTS because a newly-arrived
+  // payment can take materially longer to become daemon-spendable.
+  FORWARD_RETRY_MAX_ATTEMPTS: number;
+  // Ceiling (seconds) on the re-expiry backoff for `error` wallets that
+  // burned their refund budget but still hold customer money. Without a
+  // cap the doubling interval reaches years and the funds are stranded
+  // in all but name; with it a stuck wallet retries quietly at this
+  // cadence until the daemon can finally send. 1h is low enough to
+  // recover the same day, high enough that churn is irrelevant.
+  RESCUE_MAX_INTERVAL: number;
   // Exponential-backoff base (seconds) between refund retries.
   // Attempt N is gated by REFUND_RETRY_BASE_DELAY * 2^(N-1)
   // seconds since the last update, so the default 30s yields
@@ -215,6 +227,8 @@ nconf
       'LATE_PAYMENT_WINDOW',
       'LATE_PAYMENT_CHECK_INTERVAL',
       'MAX_REFUND_ATTEMPTS',
+      'FORWARD_RETRY_MAX_ATTEMPTS',
+      'RESCUE_MAX_INTERVAL',
       'REFUND_RETRY_BASE_DELAY',
       'MIN_CONFIRMATIONS',
       'MAX_CONFIRMATION_SAMPLE',
@@ -256,6 +270,8 @@ nconf
     LATE_PAYMENT_WINDOW: 60 * 60 * 24 * 7, // 7 days
     LATE_PAYMENT_CHECK_INTERVAL: 60 * 60, // 1 hour
     MAX_REFUND_ATTEMPTS: 5,
+    FORWARD_RETRY_MAX_ATTEMPTS: 7,
+    RESCUE_MAX_INTERVAL: 60 * 60, // 1 hour
     REFUND_RETRY_BASE_DELAY: 30,
     MIN_CONFIRMATIONS: 3,
     MAX_CONFIRMATION_SAMPLE: 10,
@@ -314,6 +330,8 @@ const NUMERIC_KEYS = [
   'LATE_PAYMENT_WINDOW',
   'LATE_PAYMENT_CHECK_INTERVAL',
   'MAX_REFUND_ATTEMPTS',
+  'FORWARD_RETRY_MAX_ATTEMPTS',
+  'RESCUE_MAX_INTERVAL',
   'REFUND_RETRY_BASE_DELAY',
   'MIN_CONFIRMATIONS',
   'MAX_CONFIRMATION_SAMPLE',

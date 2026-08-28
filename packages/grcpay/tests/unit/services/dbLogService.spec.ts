@@ -1,3 +1,4 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DbLogServiceClass, DbLogMessage } from '../../../src/services/dbLog/dbLogService';
 import { createMockEventEmitter } from '../../helpers/mocks';
 import { db } from '../../../src/lib/db';
@@ -9,7 +10,7 @@ describe('DbLogService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     mockEmitter = createMockEventEmitter();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

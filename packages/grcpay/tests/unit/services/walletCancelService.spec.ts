@@ -1,11 +1,12 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WalletCancelServiceClass, WalletCancelError } from '../../../src/services/wallet/walletCancelService';
 import { Wallet, WalletStatus, WalletMode } from '../../../src/models/Wallet';
 import { db } from '../../../src/lib/db';
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
-const mockEmit = jest.fn();
-jest.mock('../../../src/lib/event', () => ({
-  getEventEmitter: () => ({ emit: mockEmit, on: jest.fn() }),
+const mockEmit = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/lib/event', () => ({
+  getEventEmitter: () => ({ emit: mockEmit, on: vi.fn() }),
 }));
 
 function walletWithStatus(id: number, status: WalletStatus): Wallet {
@@ -28,7 +29,7 @@ describe('WalletCancelService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
   });
 

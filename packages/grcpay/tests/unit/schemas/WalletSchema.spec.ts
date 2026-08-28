@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { WalletSchema } from '../../../src/controllers/schemas/WalletSchema';
 
 describe('WalletSchema', () => {

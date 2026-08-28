@@ -1,9 +1,11 @@
-let mockKey: string | undefined;
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-jest.mock('../../../src/config', () => ({
+const mockState = vi.hoisted((): { key: string | undefined } => ({ key: undefined }));
+
+vi.mock('../../../src/config', () => ({
   config: {
     get WEBHOOK_SECRET_KEY() {
-      return mockKey;
+      return mockState.key;
     },
   },
 }));
@@ -15,7 +17,7 @@ const SECRET = 'whsec_0123456789abcdef0123456789abcdef';
 
 describe('webhookSecret at-rest encryption', () => {
   describe('with WEBHOOK_SECRET_KEY set', () => {
-    beforeEach(() => { mockKey = 'a-strong-operator-passphrase'; });
+    beforeEach(() => { mockState.key = 'a-strong-operator-passphrase'; });
 
     it('round-trips a secret', () => {
       const stored = encryptWebhookSecret(SECRET);
@@ -40,7 +42,7 @@ describe('webhookSecret at-rest encryption', () => {
   });
 
   describe('with no key configured', () => {
-    beforeEach(() => { mockKey = undefined; });
+    beforeEach(() => { mockState.key = undefined; });
 
     it('stores and reads plaintext unchanged', () => {
       expect(encryptWebhookSecret(SECRET)).toBe(SECRET);
@@ -48,9 +50,9 @@ describe('webhookSecret at-rest encryption', () => {
     });
 
     it('throws if asked to decrypt an encrypted value without the key', () => {
-      mockKey = 'k';
+      mockState.key = 'k';
       const stored = encryptWebhookSecret(SECRET);
-      mockKey = undefined;
+      mockState.key = undefined;
       expect(() => decryptWebhookSecret(stored)).toThrow(/WEBHOOK_SECRET_KEY/);
     });
   });

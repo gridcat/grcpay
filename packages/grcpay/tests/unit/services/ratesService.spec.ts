@@ -1,14 +1,15 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+vi.mock('axios');
+const mockedAxios = vi.mocked(axios);
 
 // Import after mock is set up
 import { RatesService } from '../../../src/services/rates/ratesService';
 
 describe('RatesService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Clear private caches via any-cast
     (RatesService as any).rateCache = new Map();
     (RatesService as any).currenciesCache = null;

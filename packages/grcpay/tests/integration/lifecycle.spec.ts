@@ -1,3 +1,5 @@
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 /**
  * End-to-end lifecycle coverage. Mirrors stamp.gridcoin.club's
  * integration style: spin up real services against a real (in-memory)

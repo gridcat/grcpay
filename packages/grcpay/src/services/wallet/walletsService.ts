@@ -1,6 +1,7 @@
 import { WalletMode, WalletStatus } from '../../models/Wallet';
 import { db, now } from '../../lib/db';
 import { config } from '../../config';
+import { canRetryRefund } from '../../lib/refundBackoff';
 import { log } from '../../lib/log';
 import { rpc } from '../../lib/gridcoin';
 import { getEventEmitter } from '../../lib/event';
@@ -112,36 +113,58 @@ export class WalletsServiceClass {
     log.info('Check for expired wallets');
     const openedWallets = await db
       .selectFrom('wallets')
-      .select(['id', 'status', 'created_at', 'lifespan_seconds'])
+      .select([
+        'id',
+        'status',
+        'created_at',
+        'lifespan_seconds',
+        'refund_attempts',
+        'updated_at',
+        'refund_tx',
+        'refund_amount',
+        // Needed to decide whether the partially-settled rescue can
+        // route this row back to `funded`; loadFunded only picks up
+        // checkout wallets.
+        'mode',
+      ])
       // `confirming` is included so a wallet stuck waiting for
       // confirmations past its lifespan still ages out and hands off
       // to the refund flow, instead of hanging around forever if a
       // customer's tx stalled in the mempool.
       //
-      // `error` rows are included ONLY when they're still safely
-      // refundable AND haven't already burned the expired processor's
-      // retry budget:
-      //   tx_out IS NULL         — no forward has gone out
-      //   refund_tx IS NULL      — no refund has been issued
-      //   refund_attempts = 0    — funded-processor catch-flipped row;
-      //                             NOT a deferOrError-exhausted
-      //                             expired row that already cycled
-      //                             through MAX_REFUND_ATTEMPTS.
-      //                             Without this clause the exhausted
-      //                             rows churn through error→expired
-      //                             →error every backoff window,
-      //                             flooding webhooks and db_logs.
-      // This recovers the dominant funded-processor failure mode
-      // (transient sendToAddress throw → status=error, attempts=0)
-      // without re-igniting state-machine churn on rows that are
-      // genuinely past the human-review boundary.
+      // `error` rows are included when they're still safely refundable,
+      // which now means only:
+      //   tx_out IS NULL  — no merchant forward has gone out
+      // Such a row holds customer money that was never forwarded, so it
+      // must never be abandoned. A `refund_tx IS NULL` clause used to
+      // sit alongside it; it was dropped deliberately, because a row
+      // whose overpayment refund already broadcast is exactly the
+      // partially-settled case handled below — it needs its forward
+      // FINISHED, not to be excluded from the sweep and stranded.
+      //
+      // This used to additionally require refund_attempts = 0, to stop
+      // rows that had burned the expired processor's budget from
+      // churning error→expired→error every backoff window. That did
+      // stop the churn — by stranding the funds for ever, since nothing
+      // else ever revisits them. And the usual cause of a failed refund
+      // is transient (coins not yet spendable, wallet briefly locked),
+      // i.e. exactly the condition that heals itself given time.
+      //
+      // So the budget-burned rows come back in, and the rescue is
+      // RATE-LIMITED instead of refused — canRetryRefund's interval
+      // grows with the burned attempts but is CAPPED, so a stuck wallet
+      // settles into one quiet retry per RESCUE_MAX_INTERVAL. The cap
+      // matters on both sides of the handoff: the expired processor
+      // gates the actual refund on the same helper, so an uncapped
+      // delay there would keep doubling across rescue cycles and
+      // abandon the funds anyway, however often we re-expired the row.
+      // (The webhook layer also dedups on (wallet_id, old_status,
+      // new_status), so repeated cycles don't re-notify integrators.)
       .where((eb) => eb.or([
         eb('status', 'in', [WalletStatus.new, WalletStatus.confirming]),
         eb.and([
           eb('status', '=', WalletStatus.error),
           eb('tx_out', 'is', null),
-          eb('refund_tx', 'is', null),
-          eb('refund_attempts', '=', BigInt(0)),
         ]),
       ]))
       // Never expire a wallet that has a broadcast in flight — the
@@ -156,7 +179,21 @@ export class WalletsServiceClass {
         ? config.LIFE_SPAN
         : Number(w.lifespan_seconds);
       const expiresAt = new Date(w.created_at).getTime() + lifespanSec * 1000;
-      return expiresAt <= nowMs;
+      if (expiresAt > nowMs) return false;
+      // Only `error` rows are rate-limited; new/confirming age out on
+      // their lifespan alone, exactly as before.
+      if (w.status !== WalletStatus.error) return true;
+      // Floor the attempt count at 1: canRetryRefund short-circuits to
+      // true for attempts <= 0, so a row parked with a zeroed counter
+      // would be rescued the instant it landed here, parked again on
+      // the next tick, and oscillate funded -> error -> funded forever
+      // at JOBS_INTERVAL cadence, writing two db_logs per cycle. The
+      // floor guarantees a dwell of at least REFUND_RETRY_BASE_DELAY
+      // whatever wrote the counter; the funded processor carries the
+      // count forward so the dwell then doubles up to
+      // RESCUE_MAX_INTERVAL.
+      const attempts = Math.max(1, Number(w.refund_attempts));
+      return canRetryRefund(attempts, new Date(w.updated_at), nowMs);
     });
     if (!expired.length) return;
     log.info(`${expired.length} wallet(s) to be expired`);
@@ -169,9 +206,65 @@ export class WalletsServiceClass {
     // expired. The status guard makes the UPDATE a no-op on the
     // raced rows; only rows that actually transitioned emit a log.
     await Promise.all(expired.map(async (wallet) => {
+      // Where the row goes depends on what already left the hot wallet.
+      //
+      // A row whose overpayment refund ALREADY broadcast (refund_tx set)
+      // but whose merchant forward never did (tx_out null) is only
+      // partially settled: the buyer has their change, the merchant's
+      // principal is still here. Sending that to `expired` would hand it
+      // to the buyer-refund processor, which refunds off the GROSS
+      // received balance and would pay the buyer twice — which is why it
+      // was previously excluded from the sweep altogether. But excluding
+      // it stranded the principal, since nothing else revisits an
+      // `error` row either.
+      //
+      // The correct recovery for those is to FINISH THE FORWARD, so they
+      // go back to `funded` and the funded processor picks them up.
+      // refundOverpaymentIfAny already reconstructs the persisted refund
+      // from refund_tx/refund_amount instead of re-broadcasting it, so
+      // the forward math stays correct on the second pass.
+      // A row parked because refund_tx is set with no refund_amount is
+      // deliberately awaiting a human: the funded processor cannot
+      // compute the forward from it and parks it saying so. Rescuing it
+      // would send it back to `funded`, where that same branch parks it
+      // again — an unbounded loop that also buries the CRITICAL log the
+      // park exists to raise. Leave it alone.
+      if (wallet.status === WalletStatus.error
+        && wallet.refund_tx !== null
+        && wallet.refund_amount === null) {
+        return;
+      }
+      const partiallySettled = wallet.status === WalletStatus.error
+        && wallet.refund_tx !== null;
+      // A partially-settled row needs its FORWARD finished, and only
+      // the funded processor does that — and it only looks at checkout
+      // wallets. Sending a non-checkout one to `expired` instead does
+      // not help either: the expired processor's first guard sees
+      // refund_tx set and parks it straight back as `error`, so the
+      // pair would ping-pong once per rescue window for ever. Leave it
+      // where it is and say so once, so an operator can act.
+      if (partiallySettled && wallet.mode !== WalletMode.checkout) {
+        log.error(
+          `Wallet ${wallet.id} is partially settled but mode=${wallet.mode}, which no `
+          + 'processor can finish. Leaving it in `error` for operator review rather '
+          + 'than cycling it between error and expired.',
+        );
+        // Touch updated_at so canRetryRefund backs this off. Returning
+        // without a write would leave the timestamp fixed, the gate
+        // would pass on every tick, and this ERROR would repeat every
+        // JOBS_INTERVAL for ever on a disk-constrained host.
+        await db
+          .updateTable('wallets')
+          .set({ updated_at: now() })
+          .where('id', '=', wallet.id)
+          .where('status', '=', WalletStatus.error)
+          .execute();
+        return;
+      }
+      const target = partiallySettled ? WalletStatus.funded : WalletStatus.expired;
       const result = await db
         .updateTable('wallets')
-        .set({ status: WalletStatus.expired, updated_at: now() })
+        .set({ status: target, updated_at: now() })
         .where('id', '=', wallet.id)
         .where('status', '=', wallet.status)
         .executeTakeFirst();
@@ -182,7 +275,7 @@ export class WalletsServiceClass {
         walletId: Number(wallet.id),
         action: 'status',
         oldStatus: wallet.status,
-        newStatus: WalletStatus.expired,
+        newStatus: target,
       });
     }));
   }

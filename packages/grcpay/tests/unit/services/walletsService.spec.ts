@@ -1,11 +1,12 @@
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { WalletsServiceClass } from '../../../src/services/wallet/walletsService';
 import { WalletStatus } from '../../../src/models/Wallet';
 import { db } from '../../../src/lib/db';
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
-const mockEmit = jest.fn();
-jest.mock('../../../src/lib/event', () => ({
-  getEventEmitter: () => ({ emit: mockEmit, on: jest.fn() }),
+const mockEmit = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/lib/event', () => ({
+  getEventEmitter: () => ({ emit: mockEmit, on: vi.fn() }),
 }));
 
 async function status(id: bigint): Promise<string> {
@@ -22,7 +23,7 @@ describe('WalletsService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
   });
 
@@ -175,6 +176,86 @@ describe('WalletsService', () => {
       await service.expireWallets();
 
       expect(await status(row.id)).toBe(WalletStatus.expired);
+    });
+
+    it('rescues an error row that burned its refund budget — money is never abandoned', async () => {
+      // The stranding regression: the expired processor parks a wallet
+      // in `error` with refund_attempts at the ceiling after its refund
+      // attempts fail (typically because the coins are not yet
+      // spendable). That row still holds customer money that was
+      // NEITHER forwarded nor refunded. Requiring refund_attempts = 0
+      // here meant nothing ever revisited it again.
+      const row = await insertWallet({
+        address: 'Sburned_addr_34567890abcdefghijkl1',
+        status: WalletStatus.error,
+        tx_out: null,
+        refund_tx: null,
+        refund_attempts: 5,
+        created_at: longAgo,
+        updated_at: longAgo,
+      });
+
+      await service.expireWallets();
+
+      expect(await status(row.id)).toBe(WalletStatus.expired);
+    });
+
+    it('rate-limits that rescue instead of churning error->expired->error', async () => {
+      // The other half of the bargain: the row comes back, but only
+      // once its capped backoff window has elapsed, so a genuinely
+      // stuck wallet retries quietly rather than every tick.
+      const justNow = new Date().toISOString();
+      const row = await insertWallet({
+        address: 'Sburned_recent_4567890abcdefghijk1',
+        status: WalletStatus.error,
+        tx_out: null,
+        refund_tx: null,
+        refund_attempts: 5,
+        created_at: longAgo,
+        updated_at: justNow,
+      });
+
+      await service.expireWallets();
+
+      expect(await status(row.id)).toBe(WalletStatus.error);
+    });
+
+    it('routes a partially-settled error row back to funded, not to the refund path', async () => {
+      // Overpayment refund already broadcast, merchant forward never
+      // did. Sending this to `expired` would let the buyer-refund
+      // processor pay out the GROSS balance and refund the buyer twice;
+      // excluding it entirely (the old behaviour) stranded the
+      // merchant's principal. The only correct recovery is to finish
+      // the forward, so it goes back to `funded`.
+      const row = await insertWallet({
+        address: 'Spartial_addr_567890abcdefghijkl1',
+        status: WalletStatus.error,
+        tx_out: null,
+        refund_tx: 'overpayment_refund_tx',
+        refund_amount: BigInt(200_000_000),
+        refund_attempts: 5,
+        created_at: longAgo,
+        updated_at: longAgo,
+      });
+
+      await service.expireWallets();
+
+      expect(await status(row.id)).toBe(WalletStatus.funded);
+    });
+
+    it('still refuses to touch an error row that already sent money out', async () => {
+      const row = await insertWallet({
+        address: 'Sforwarded_addr_567890abcdefghijk1',
+        status: WalletStatus.error,
+        tx_out: 'already_forwarded_tx',
+        refund_attempts: 5,
+        created_at: longAgo,
+        updated_at: longAgo,
+      });
+
+      await service.expireWallets();
+
+      expect(await status(row.id)).toBe(WalletStatus.error);
     });
 
     it('does nothing when no wallets to expire', async () => {

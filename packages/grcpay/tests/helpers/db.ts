@@ -1,3 +1,9 @@
+import type { Migration, MigrationProvider } from 'kysely';
+import * as initial from '../../src/migrations/20260507000000_initial';
+import * as webhooks from '../../src/migrations/20260519120000_webhooks';
+import * as pendingBroadcast from '../../src/migrations/20260526120000_pending_broadcast';
+import * as dbLogsDetail from '../../src/migrations/20260529130000_db_logs_detail';
+import * as incomingTxsSender from '../../src/migrations/20260529140000_incoming_txs_sender';
 import { db, now } from '../../src/lib/db';
 import { migrateToLatest } from '../../src/lib/migrate';
 import { WalletStatus, WalletMode } from '../../src/models/Wallet';
@@ -24,15 +30,43 @@ interface InsertWalletOverrides {
 
 let migrated = false;
 
+// Kysely's FileMigrationProvider resolves each migration with a dynamic
+// import() executed inside kysely itself. kysely is externalised, so that
+// import never reaches the test runner's transform and is handled by Node's
+// own ESM loader — which refuses a .ts file with `Unknown file extension
+// ".ts"`. Node 24 hides this by stripping types natively; Node 22 (CI,
+// Docker, the version this package targets) does not, so the suite passed
+// locally and failed in CI.
+//
+// Importing them statically sidesteps the loader entirely. import.meta.glob
+// would avoid the maintenance below, but this package compiles to CommonJS
+// and tsc rejects import.meta under that module setting.
+//
+// ADDING A MIGRATION? Add it here too. migrations.spec.ts fails if you don't.
+export const bundledMigrations: Record<string, Migration> = {
+  '20260507000000_initial': initial,
+  '20260519120000_webhooks': webhooks,
+  '20260526120000_pending_broadcast': pendingBroadcast,
+  '20260529130000_db_logs_detail': dbLogsDetail,
+  '20260529140000_incoming_txs_sender': incomingTxsSender,
+};
+
+// Keys are the bare filenames the production FileMigrationProvider would
+// produce; Kysely sorts on them to order the run.
+const bundledMigrationProvider: MigrationProvider = {
+  async getMigrations(): Promise<Record<string, Migration>> {
+    return bundledMigrations;
+  },
+};
+
 /**
- * Idempotent migration of the in-memory test DB. Each Jest worker
- * runs in a single process (--runInBand) so the better-sqlite3
- * `:memory:` connection is shared across test files; migrating once
- * is enough.
+ * Idempotent migration of the in-memory test DB. Each Vitest worker
+ * gets its own better-sqlite3 `:memory:` connection, so migrating once
+ * per worker is enough.
  */
 export async function setupTestDb(): Promise<void> {
   if (migrated) return;
-  await migrateToLatest();
+  await migrateToLatest(bundledMigrationProvider);
   migrated = true;
 }
 

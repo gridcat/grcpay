@@ -7,7 +7,7 @@ import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
 import { canRetryRefund } from '../../lib/refundBackoff';
-import { halford2grc, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import { halford2grc, grc2halford, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
 import type { WalletRow } from '../../lib/database';
 
@@ -611,12 +611,25 @@ export class WalletFundedProcessorServiceClass {
       // retry counter in one statement so the row stays `funded` and
       // self-heals on a later tick (throttled by shouldDeferForBackoff);
       // escalate to `error` only once retries are exhausted.
+      //
+      // Budgeted with FORWARD_RETRY_MAX_ATTEMPTS, not MAX_REFUND_ATTEMPTS:
+      // this IS a merchant forward (it just pays the buyer's overpayment
+      // out in the same tx), so it faces the same daemon-liquidity
+      // physics as the plain forward — a just-arrived UTXO that needs
+      // 10-25 minutes to become spendable. The 5-attempt refund budget
+      // tops out around 7.5 minutes and would terminalize before the
+      // funds recover.
       const attempts = Number(wallet.refund_attempts) + 1;
-      const exhausted = attempts >= config.MAX_REFUND_ATTEMPTS;
+      const exhausted = attempts >= config.FORWARD_RETRY_MAX_ATTEMPTS;
       await db
         .updateTable('wallets')
         .set({
           pending_broadcast: null,
+          // Carried forward, never zeroed. expireWallets rescues an
+          // `error` row on tx_out IS NULL alone, and RATE-LIMITS that
+          // rescue with canRetryRefund on this counter — zeroing here
+          // would drop the dwell to its floor and churn the row back
+          // through `expired` every window instead of backing off.
           refund_attempts: BigInt(attempts),
           status: exhausted ? WalletStatus.error : WalletStatus.funded,
           updated_at: now(),
@@ -624,13 +637,15 @@ export class WalletFundedProcessorServiceClass {
         .where('id', '=', wallet.id)
         .where('pending_broadcast', '=', intentMarker)
         .execute();
-      log.error(`Combined settle attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS} failed for ${wallet.address}: ${e}`);
+      log.error(`Combined settle attempt ${attempts}/${config.FORWARD_RETRY_MAX_ATTEMPTS} failed for ${wallet.address}: ${e}`);
       getEventEmitter<DbLogMessage>().emit('log', {
         walletId: Number(wallet.id),
         action: exhausted ? 'status' : 'settle_retry',
         oldStatus: WalletStatus.funded,
-        newStatus: exhausted ? WalletStatus.error : `attempt ${attempts}/${config.MAX_REFUND_ATTEMPTS}`,
-        detail: `combined settle failed: ${String(e).slice(0, 500)}`,
+        newStatus: exhausted ? WalletStatus.error : `attempt ${attempts}/${config.FORWARD_RETRY_MAX_ATTEMPTS}`,
+        detail: exhausted
+          ? `combined settle failed after ${attempts} attempts: ${String(e).slice(0, 500)}`
+          : `combined settle failed: ${String(e).slice(0, 500)}`,
       });
       return;
     }
@@ -782,6 +797,110 @@ export class WalletFundedProcessorServiceClass {
         );
       }
 
+      // Forward math drains the hot wallet cleanly in either branch:
+      //   success   → remaining = required, forward = required - fee
+      //   none/abandoned → remaining = received, forward = received - fee
+      const remainingHalford = wallet.amount_recieved - refund.debitedHalford;
+      const forwardAmountGrc = halford2grc(remainingHalford - minFeeHalford).toNumber();
+
+      // WAIT for the money to become spendable rather than hammering the
+      // daemon with sends that cannot succeed.
+      //
+      // `funded` only means getreceivedbyaddress cleared MIN_CONFIRMATIONS
+      // — a RECEIVED-ledger view that says nothing about spendability.
+      // Observed on testnet for the very payment this exists for:
+      //     getreceivedbyaddress(addr, 3) = 1.0   -> we call it funded
+      //     getunconfirmedbalance         = 1.0   -> daemon: untrusted
+      //     getbalance                    = 0.0   -> sendtoaddress fails
+      // getWalletInfo().balance IS the daemon's GetBalance(), and
+      // GetBalance() is precisely what the send path pre-checks:
+      // SendMoneyToDestination opens with
+      // `if (nValue + nTransactionFee > GetBalance()) return
+      // _("Insufficient funds")` (wallet.cpp). Gate on the same number
+      // it does.
+      //
+      // Do NOT "improve" this into a listunspent sum. The daemon carries
+      // two different depth rules, seven blocks apart:
+      //     GetBalance()  -> IsTrusted() && (IsConfirmed() || fFromMe)
+      //                      IsConfirmed() is `depth >= 10`
+      //     SelectCoins() -> AvailableCoins(fOnlyConfirmed = true)
+      //                      IsTrusted() is `depth >= 3`
+      // A customer payment has fFromMe = false, so listunspent 3 reports
+      // it spendable at depth 3 while getbalance withholds it until 10.
+      // Coin selection would indeed take it — but the RPC never reaches
+      // coin selection, because the GetBalance() pre-check rejects the
+      // call first. Tried on live testnet at depth 8: listunspent 3 said
+      // 14.726 available, and all three sends still died on
+      // "Insufficient funds" until depth 10 landed.
+      // (Only the first check: coin selection can still fail later —
+      // that is what the marker-protected retry path below is for.)
+      //
+      // The deadline is computed BEFORE the probe on purpose. `funded` is
+      // invisible to expireWallets, so any path that skips the liveness
+      // bound holds customer money indefinitely — including a probe that
+      // throws every tick. Both the shortfall branch and the probe catch
+      // must therefore be able to terminalize.
+      const lifespanSec = wallet.lifespan_seconds === null
+        ? config.LIFE_SPAN
+        : Number(wallet.lifespan_seconds);
+      const deadline = new Date(wallet.created_at).getTime() + lifespanSec * 1000;
+      const pastDeadline = Date.now() >= deadline;
+
+      let spendableHalford: bigint | null = null;
+      try {
+        const info = await this.grcRpc.getWalletInfo();
+        spendableHalford = grc2halford(Number(info?.balance ?? 0));
+      } catch (e) {
+        log.error(`Spendable-balance probe failed for ${wallet.address}: ${e}`);
+        if (!pastDeadline) continue;
+      }
+
+      // Compared in halford. Reconstructing the requirement as
+      // `forwardAmountGrc + MIN_FEE` adds two binary floats and lands a
+      // few ulps high (0.00399965 + 0.001 => 0.0049996500000000004), so an
+      // exactly sufficient balance would read as short. Since
+      // forward = remaining - fee, the requirement simply IS
+      // `remainingHalford`. grc2halford ceils, rounding the spendable side
+      // UP — the permissive direction.
+      if (spendableHalford === null || spendableHalford < remainingHalford) {
+        if (!pastDeadline) {
+          log.info(
+            `Waiting for spendable funds on ${wallet.address}: `
+            + `${spendableHalford ?? 'unknown'} of ${remainingHalford} halford available`,
+          );
+          continue;
+        }
+        // Bounded by the wallet's own lifespan, NOT an attempt counter:
+        // maturity is wall-clock, so counting attempts measures the wrong
+        // thing. The attempt is still COUNTED on the way out, because
+        // expireWallets rate-limits its rescue on this counter — a zero
+        // would let the rescue fire on the very next tick and bounce the
+        // row straight back to `funded`.
+        const expiredResult = await db
+          .updateTable('wallets')
+          .set({
+            status: WalletStatus.error,
+            refund_attempts: BigInt(Number(wallet.refund_attempts) + 1),
+            updated_at: now(),
+          })
+          .where('id', '=', wallet.id)
+          .where('status', '=', WalletStatus.funded)
+          .executeTakeFirst();
+        if (!expiredResult.numUpdatedRows || Number(expiredResult.numUpdatedRows) === 0) {
+          log.warn(`Spendability wait for ${wallet.address} lost the race — concurrent writer.`);
+          continue;
+        }
+        getEventEmitter<DbLogMessage>().emit('log', {
+          walletId: Number(wallet.id),
+          action: 'status',
+          oldStatus: WalletStatus.funded,
+          newStatus: WalletStatus.error,
+          detail: 'funds never became spendable before expiry: '
+            + `${spendableHalford ?? 'probe unavailable'} of ${remainingHalford} halford`,
+        });
+        continue;
+      }
+
       // SIGKILL-SAFETY: pre-broadcast intent marker. Without this, a
       // SIGKILL between sendToAddress returning and the durable UPDATE
       // below would leave the row at status=funded, tx_out=NULL, and
@@ -809,11 +928,6 @@ export class WalletFundedProcessorServiceClass {
 
       let tx: string | null = null;
       try {
-        // Forward math drains the hot wallet cleanly in either branch:
-        //   success   → remaining = required, forward = required - fee
-        //   none/abandoned → remaining = received, forward = received - fee
-        const remainingHalford = wallet.amount_recieved - refund.debitedHalford;
-        const forwardAmountGrc = halford2grc(remainingHalford - minFeeHalford).toNumber();
         tx = await this.grcRpc.sendToAddress(
           wallet.recipient!,
           forwardAmountGrc,
@@ -1046,20 +1160,21 @@ export class WalletFundedProcessorServiceClass {
         // requires marker IS NULL, so this is genuinely rare), accept
         // the loss and let the other writer's intent win.
         //
-        // refund_attempts is reset to 0 here on purpose. This row is
-        // intended to auto-recover via walletsService.expireWallets,
-        // which only re-includes error rows with refund_attempts=0 to
-        // avoid the churn loop that previously cycled expired-
-        // processor exhausted-budget rows through error→expired→error.
-        // The tradeoff: we lose the "burned the retry budget"
-        // diagnostic that setTerminal(error) preserves in the expired
-        // processor. Acceptable here because funded-catch rows are
-        // recovery candidates, not human-investigation candidates.
+        // Intermediate failures stay `funded` so loadFunded retries them
+        // (throttled by shouldDeferForBackoff) — a daemon that refuses
+        // today usually accepts once the UTXO matures. Only on final
+        // exhaustion do we terminalize, and the burned budget goes with
+        // the row: expireWallets rescues `error` rows on tx_out IS NULL
+        // and rate-limits with canRetryRefund on this counter, so
+        // carrying it forward is what turns the rescue into a capped
+        // backoff rather than a per-tick churn.
+        const attempts = Number(wallet.refund_attempts) + 1;
+        const exhausted = attempts >= config.FORWARD_RETRY_MAX_ATTEMPTS;
         const result = await db
           .updateTable('wallets')
           .set({
-            status: WalletStatus.error,
-            refund_attempts: BigInt(0),
+            status: exhausted ? WalletStatus.error : WalletStatus.funded,
+            refund_attempts: BigInt(attempts),
             updated_at: now(),
           })
           .where('id', '=', wallet.id)
@@ -1075,14 +1190,18 @@ export class WalletFundedProcessorServiceClass {
         }
         getEventEmitter<DbLogMessage>().emit('log', {
           walletId: Number(wallet.id),
-          action: 'status',
+          action: exhausted ? 'status' : 'forward_retry',
           oldStatus: WalletStatus.funded,
-          newStatus: WalletStatus.error,
+          newStatus: exhausted
+            ? WalletStatus.error
+            : `attempt ${attempts}/${config.FORWARD_RETRY_MAX_ATTEMPTS}`,
           // Persist WHY the forward failed (e.g. "transaction rejected —
           // coins already spent") so it's visible to read-only
           // observers, not just in stdout. Bounded so a verbose RPC
           // error can't bloat the row.
-          detail: `forward failed: ${String(e).slice(0, 500)}`,
+          detail: exhausted
+            ? `forward failed after ${attempts} attempts: ${String(e).slice(0, 500)}`
+            : `forward failed: ${String(e).slice(0, 500)}`,
         });
       }
     }

@@ -1,12 +1,14 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WalletLatePaymentProcessorServiceClass } from '../../../src/services/wallet/walletLatePaymentProcessorService';
 import { WalletStatus } from '../../../src/models/Wallet';
 import { createMockRpc } from '../../helpers/mocks';
 import { db } from '../../../src/lib/db';
+import { config } from '../../../src/config';
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
-const mockEmit = jest.fn();
-jest.mock('../../../src/lib/event', () => ({
-  getEventEmitter: () => ({ emit: mockEmit, on: jest.fn() }),
+const mockEmit = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/lib/event', () => ({
+  getEventEmitter: () => ({ emit: mockEmit, on: vi.fn() }),
 }));
 
 const WALLET_ADDR = 'Swallet_late_1234567890abcdefghij';
@@ -50,7 +52,7 @@ describe('WalletLatePaymentProcessorService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     mockRpc = createMockRpc();
     service = new WalletLatePaymentProcessorServiceClass(mockRpc as never);
@@ -183,8 +185,6 @@ describe('WalletLatePaymentProcessorService', () => {
   });
 
   it('gives up and bumps amount_recieved after MAX_REFUND_ATTEMPTS failures', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    const { config } = require('../../../src/config');
     const farInThePast = new Date(Date.now() - 1000 * 60 * 60).toISOString();
     const row = await insertWallet({
       address: WALLET_ADDR,

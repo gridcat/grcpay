@@ -1,12 +1,13 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WalletsBalanceUpdaterServiceClass } from '../../../src/services/wallet/walletsBalanceUpdater';
 import { WalletStatus } from '../../../src/models/Wallet';
 import { createMockRpc } from '../../helpers/mocks';
 import { db } from '../../../src/lib/db';
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
-const mockEmit = jest.fn();
-jest.mock('../../../src/lib/event', () => ({
-  getEventEmitter: () => ({ emit: mockEmit, on: jest.fn() }),
+const mockEmit = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/lib/event', () => ({
+  getEventEmitter: () => ({ emit: mockEmit, on: vi.fn() }),
 }));
 
 describe('WalletsBalanceUpdaterService', () => {
@@ -15,7 +16,7 @@ describe('WalletsBalanceUpdaterService', () => {
 
   beforeAll(setupTestDb);
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await truncateAll();
     mockRpc = createMockRpc();
     service = new WalletsBalanceUpdaterServiceClass(mockRpc as never);
