@@ -14,7 +14,7 @@ const QUOTE_URL = `${COINGECKO_BASE}/coins/${GRC_ID}`
 const RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // How long an expired quote stays servable once CoinGecko starts
-// failing. Rates here are display-only, so a few-hours-old number beats
+// failing. Rates here are display only, so a few-hours-old number beats
 // handing the caller nothing.
 const RATE_STALE_MS = 6 * 60 * 60 * 1000;
 // Same idea for the currency list, which changes about never.
@@ -41,7 +41,7 @@ export interface RatesHealth {
   degraded: boolean;
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
-  /** Sanitised reason — /status is public, so no URLs or upstream dumps. */
+  /** Sanitised reason: /status is public, so no URLs or upstream dumps. */
   lastError: string | null;
   consecutiveFailures: number;
 }
@@ -62,7 +62,7 @@ class RatesServiceClass {
   private quote: CachedQuote | null = null;
 
   // Single-flight guard. A burst of concurrent callers (grcbazaar asks
-  // for USD/EUR/GBP in parallel) shares one CoinGecko call — a fan-out
+  // for USD/EUR/GBP in parallel) shares one CoinGecko call. A fan-out
   // is exactly what earns a 429 on the free tier.
   private inFlight: Promise<CachedQuote> | null = null;
 
@@ -74,7 +74,7 @@ class RatesServiceClass {
 
   private consecutiveFailures = 0;
 
-  // Explicit flag rather than comparing the two timestamps — success and
+  // Explicit flag rather than comparing the two timestamps: success and
   // failure can land in the same millisecond.
   private degraded = false;
 
