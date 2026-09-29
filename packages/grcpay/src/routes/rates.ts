@@ -31,7 +31,7 @@ ratesRouter.get('/:currency', async (req: Request, res: Response) => {
     });
   } catch (e: unknown) {
     // Don't echo the upstream/axios message to the client (it leaks
-    // CoinGecko/infra detail) — log it server-side and classify.
+    // CoinGecko/infra detail): log it server-side and classify.
     log.warn(`Rate lookup failed for '${req.params.currency}': ${e}`);
 
     if (e instanceof UnsupportedCurrencyError) {
@@ -45,7 +45,7 @@ ratesRouter.get('/:currency', async (req: Request, res: Response) => {
     }
 
     // Upstream is down or rate-limiting us and there's no cached quote
-    // left to serve. That's ours, not the caller's — reporting it as a
+    // left to serve. That's ours, not the caller's. Reporting it as a
     // 400 made routine CoinGecko blips look like integration bugs.
     res.status(StatusCodes.SERVICE_UNAVAILABLE).send({
       errors: [new ErrorModel(

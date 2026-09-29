@@ -223,9 +223,9 @@ jobs:
           command: mkdir -p ~/.ssh/ && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
       - run:
           # The workspace is the checkout from the start of the pipeline.
-          # A release job that ran before this one pushed its
-          # "chore(release)" commit, and semantic-release refuses to run
-          # on a branch behind the remote. Catch up first.
+          # A release job that ran before this one has pushed its
+          # "chore(release)" commit since, and semantic-release refuses to
+          # run on a branch behind the remote, so catch up first.
           name: Sync with the remote branch
           command: cd ~/app && git fetch origin "$CIRCLE_BRANCH" && git reset --hard "origin/$CIRCLE_BRANCH"
       - run:
@@ -242,9 +242,9 @@ jobs:
           command: mkdir -p ~/.ssh/ && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
       - run:
           # The workspace is the checkout from the start of the pipeline.
-          # A release job that ran before this one pushed its
-          # "chore(release)" commit, and semantic-release refuses to run
-          # on a branch behind the remote. Catch up first.
+          # A release job that ran before this one has pushed its
+          # "chore(release)" commit since, and semantic-release refuses to
+          # run on a branch behind the remote, so catch up first.
           name: Sync with the remote branch
           command: cd ~/app && git fetch origin "$CIRCLE_BRANCH" && git reset --hard "origin/$CIRCLE_BRANCH"
       - run:
@@ -422,8 +422,9 @@ workflows:
             branches:
               only: master
 
-      # After grcpay-release, never beside it: both push a release commit
-      # to master, and semantic-release skips when the branch moved.
+      # Runs after grcpay-release rather than beside it: both push a
+      # release commit to master, and semantic-release skips a branch
+      # that has moved.
       - grcpay-frontend-release:
           context: semantic-release
           requires:
