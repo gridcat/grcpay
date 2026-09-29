@@ -19,7 +19,7 @@ export class RatesRepository {
       `${process.env.NEXT_PUBLIC_API_URL}/rates`,
     );
     const store = new Store();
-    const parsed = store.sync(result) as Rate[] | null;
+    const parsed = store.sync(result) as unknown as Rate[] | null;
     return parsed ?? [];
   }
 
@@ -28,7 +28,7 @@ export class RatesRepository {
       `${process.env.NEXT_PUBLIC_API_URL}/rates/${currency}`,
     );
     const store = new Store();
-    const parsed = store.sync(result) as Rate | null;
+    const parsed = store.sync(result) as unknown as Rate | null;
     return parsed;
   }
 }

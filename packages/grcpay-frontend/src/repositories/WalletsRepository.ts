@@ -30,7 +30,7 @@ export class WalletsRepository {
       { headers: { 'Content-Type': 'application/vnd.api+json' } },
     );
     const store = new Store();
-    const parsed = store.sync(result) as WalletRawData | null;
+    const parsed = store.sync(result) as unknown as WalletRawData | null;
     return parsed ? new WalletEntity(parsed) : null;
   }
 
@@ -47,7 +47,7 @@ export class WalletsRepository {
       { headers: { 'X-Wallet-Token': token } },
     );
     const store = new Store();
-    const parsed = store.sync(result) as WalletRawData | null;
+    const parsed = store.sync(result) as unknown as WalletRawData | null;
     if (!parsed) return null;
     const entity = new WalletEntity(parsed);
     // The server never echoes `token` back on a GET. Restore it on
