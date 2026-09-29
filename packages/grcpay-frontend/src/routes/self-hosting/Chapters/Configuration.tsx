@@ -142,6 +142,12 @@ const envVars: EnvVar[] = [
       'Per-IP rate limit on GET /rates and /rates/:currency, in requests per minute. Server-side cached for five minutes, so requests beyond the cache TTL hit CoinGecko rather than GRCpay; the limiter mostly exists to discourage polling storms.',
   },
   {
+    name: 'COINGECKO_API_KEY',
+    required: false,
+    description:
+      'CoinGecko Demo API key, sent as x-cg-demo-api-key on every rate lookup. Unset means keyless calls to the CoinGecko public API, which are rate-limited per IP and which CoinGecko has started closing endpoint by endpoint. A Demo key is free; the rates service makes at most one CoinGecko call per five minutes, so the free tier is more than enough.',
+  },
+  {
     name: 'RPC_BREAKER_THRESHOLD',
     required: false,
     default: '5',

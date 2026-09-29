@@ -1,11 +1,17 @@
 /* eslint-disable max-classes-per-file */
 import axios from 'axios';
+import { config } from '../../config';
 import { log } from '../../lib/log';
 
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 const GRC_ID = 'gridcoin-research';
+// The coin endpoint carries GRC's price in every currency CoinGecko
+// quotes, so one call covers rates and the currency list. The old
+// per-currency /simple/price endpoint answers 403 to keyless callers.
+const QUOTE_URL = `${COINGECKO_BASE}/coins/${GRC_ID}`
+  + '?localization=false&tickers=false&market_data=true'
+  + '&community_data=false&developer_data=false&sparkline=false';
 const RATE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const CURRENCIES_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // How long an expired quote stays servable once CoinGecko starts
 // failing. Rates here are display-only, so a few-hours-old number beats
@@ -22,13 +28,9 @@ export class UnsupportedCurrencyError extends Error {
   }
 }
 
-interface CachedRate {
-  rate: number;
-  fetchedAt: number;
-}
-
-interface CachedCurrencies {
-  list: string[];
+interface CachedQuote {
+  /** Price of 1 GRC per currency code (lowercase), as CoinGecko quotes it. */
+  prices: Record<string, number>;
   fetchedAt: number;
 }
 
@@ -57,16 +59,12 @@ function describeUpstreamError(e: unknown): string {
 const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
 
 class RatesServiceClass {
-  private rateCache = new Map<string, CachedRate>();
+  private quote: CachedQuote | null = null;
 
-  private currenciesCache: CachedCurrencies | null = null;
-
-  // Single-flight guards. A burst of concurrent callers (grcbazaar asks
-  // for USD/EUR/GBP in parallel) must not fan out into a burst of
-  // CoinGecko calls — that is exactly what earns a 429 on the free tier.
-  private inFlightRates = new Map<string, Promise<number>>();
-
-  private inFlightCurrencies: Promise<string[]> | null = null;
+  // Single-flight guard. A burst of concurrent callers (grcbazaar asks
+  // for USD/EUR/GBP in parallel) shares one CoinGecko call — a fan-out
+  // is exactly what earns a 429 on the free tier.
+  private inFlight: Promise<CachedQuote> | null = null;
 
   private lastSuccessAt: number | null = null;
 
@@ -86,37 +84,20 @@ class RatesServiceClass {
    */
   public async getRate(currency: string): Promise<number> {
     const key = currency.toLowerCase();
-
-    const cached = this.rateCache.get(key);
-    if (cached && Date.now() - cached.fetchedAt < RATE_TTL_MS) {
-      log.info(`Rate cache hit for ${key}: ${cached.rate}`);
-      return cached.rate;
+    const { prices } = await this.getQuote(RATE_STALE_MS);
+    const rate = prices[key];
+    if (rate === undefined) {
+      throw new UnsupportedCurrencyError(`Currency "${key}" is not supported`);
     }
-
-    const inFlight = this.inFlightRates.get(key);
-    if (inFlight) return inFlight;
-
-    const pending = this.refreshRate(key, cached)
-      .finally(() => this.inFlightRates.delete(key));
-    this.inFlightRates.set(key, pending);
-    return pending;
+    return rate;
   }
 
   /**
-   * Get list of supported fiat currencies from CoinGecko.
+   * Get list of currencies CoinGecko quotes GRC in.
    */
   public async getSupportedCurrencies(): Promise<string[]> {
-    const cached = this.currenciesCache;
-    if (cached && Date.now() - cached.fetchedAt < CURRENCIES_TTL_MS) {
-      return cached.list;
-    }
-
-    if (this.inFlightCurrencies) return this.inFlightCurrencies;
-
-    const pending = this.refreshCurrencies(cached)
-      .finally(() => { this.inFlightCurrencies = null; });
-    this.inFlightCurrencies = pending;
-    return pending;
+    const { prices } = await this.getQuote(CURRENCIES_STALE_MS);
+    return Object.keys(prices);
   }
 
   /** Upstream health, surfaced on /status so the control panel can shout about it. */
@@ -131,63 +112,68 @@ class RatesServiceClass {
     };
   }
 
-  private async refreshRate(key: string, cached: CachedRate | undefined): Promise<number> {
+  /**
+   * The cached quote while it is fresh, otherwise one shared refresh. When
+   * the refresh fails the stale quote is served while it is younger than
+   * `staleMs`; past that the error propagates.
+   */
+  private async getQuote(staleMs: number): Promise<CachedQuote> {
+    const cached = this.quote;
+    if (cached && Date.now() - cached.fetchedAt < RATE_TTL_MS) {
+      return cached;
+    }
+
+    if (!this.inFlight) {
+      this.inFlight = this.refreshQuote().finally(() => { this.inFlight = null; });
+    }
+
     try {
-      const supported = await this.getSupportedCurrencies();
-      if (!supported.includes(key)) {
-        throw new UnsupportedCurrencyError(`Currency "${key}" is not supported`);
-      }
-
-      log.info(`Fetching GRC rate for ${key} from CoinGecko`);
-      const url = `${COINGECKO_BASE}/simple/price?ids=${GRC_ID}&vs_currencies=${key}`;
-      const response = await axios.get(url, { timeout: 10000 });
-
-      const rate = response.data?.[GRC_ID]?.[key];
-      if (typeof rate !== 'number' || rate <= 0) {
-        throw new Error(`Unable to fetch rate for "${key}"`);
-      }
-
-      this.rateCache.set(key, { rate, fetchedAt: Date.now() });
-      this.lastSuccessAt = Date.now();
-      this.consecutiveFailures = 0;
-      this.degraded = false;
-      return rate;
+      return await this.inFlight;
     } catch (e: unknown) {
-      // An unsupported currency isn't an upstream problem — don't let it
-      // pollute the health counters.
-      if (e instanceof UnsupportedCurrencyError) throw e;
-
-      this.lastFailureAt = Date.now();
-      this.lastError = describeUpstreamError(e);
-      this.degraded = true;
-
-      if (cached && Date.now() - cached.fetchedAt < RATE_STALE_MS) {
+      if (cached && Date.now() - cached.fetchedAt < staleMs) {
         const ageMin = Math.round((Date.now() - cached.fetchedAt) / 60000);
-        log.warn(`Serving ${ageMin}m-stale ${key} rate after upstream failure: ${e}`);
-        return cached.rate;
+        log.warn(`Serving ${ageMin}m-stale GRC quote after upstream failure: ${e}`);
+        return cached;
       }
-
-      this.consecutiveFailures += 1;
       throw e;
     }
   }
 
-  private async refreshCurrencies(cached: CachedCurrencies | null): Promise<string[]> {
+  private async refreshQuote(): Promise<CachedQuote> {
     try {
-      log.info('Fetching supported currencies from CoinGecko');
-      const url = `${COINGECKO_BASE}/simple/supported_vs_currencies`;
-      const response = await axios.get(url, { timeout: 10000 });
+      log.info('Fetching GRC quote from CoinGecko');
+      const response = await axios.get(QUOTE_URL, {
+        timeout: 10000,
+        headers: config.COINGECKO_API_KEY
+          ? { 'x-cg-demo-api-key': config.COINGECKO_API_KEY }
+          : {},
+      });
 
-      if (!Array.isArray(response.data)) {
-        throw new Error('Invalid response from CoinGecko supported currencies endpoint');
+      const raw: unknown = response.data?.market_data?.current_price;
+      if (!raw || typeof raw !== 'object') {
+        throw new Error('Invalid response from CoinGecko coin endpoint');
+      }
+      const prices: Record<string, number> = {};
+      Object.entries(raw as Record<string, unknown>).forEach(([code, price]) => {
+        if (typeof price === 'number' && price > 0) prices[code] = price;
+      });
+      if (Object.keys(prices).length === 0) {
+        throw new Error('CoinGecko returned no GRC prices');
       }
 
-      this.currenciesCache = { list: response.data, fetchedAt: Date.now() };
-      return response.data;
+      this.quote = { prices, fetchedAt: Date.now() };
+      this.lastSuccessAt = Date.now();
+      this.consecutiveFailures = 0;
+      this.degraded = false;
+      return this.quote;
     } catch (e: unknown) {
-      if (cached && Date.now() - cached.fetchedAt < CURRENCIES_STALE_MS) {
-        log.warn(`Serving stale supported-currencies list after upstream failure: ${e}`);
-        return cached.list;
+      this.lastFailureAt = Date.now();
+      this.lastError = describeUpstreamError(e);
+      this.degraded = true;
+      // A failure the stale quote still covers is degradation, not an outage.
+      const cached = this.quote;
+      if (!cached || Date.now() - cached.fetchedAt >= RATE_STALE_MS) {
+        this.consecutiveFailures += 1;
       }
       throw e;
     }

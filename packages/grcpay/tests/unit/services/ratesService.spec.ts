@@ -4,20 +4,34 @@ import axios from 'axios';
 vi.mock('axios');
 const mockedAxios = vi.mocked(axios);
 
+const mockState = vi.hoisted((): { apiKey: string | undefined } => ({ apiKey: undefined }));
+
+vi.mock('../../../src/config', () => ({
+  config: {
+    get COINGECKO_API_KEY() {
+      return mockState.apiKey;
+    },
+  },
+}));
+
 // Import after mock is set up
 import { RatesService, UnsupportedCurrencyError } from '../../../src/services/rates/ratesService';
 
-// Clear private caches and health counters via any-cast.
+// Clear the private cache and health counters via any-cast.
 function resetService(): void {
-  (RatesService as any).rateCache = new Map();
-  (RatesService as any).currenciesCache = null;
-  (RatesService as any).inFlightRates = new Map();
-  (RatesService as any).inFlightCurrencies = null;
+  (RatesService as any).quote = null;
+  (RatesService as any).inFlight = null;
   (RatesService as any).lastSuccessAt = null;
   (RatesService as any).lastFailureAt = null;
   (RatesService as any).lastError = null;
   (RatesService as any).consecutiveFailures = 0;
   (RatesService as any).degraded = false;
+  mockState.apiKey = undefined;
+}
+
+/** The slice of CoinGecko's /coins/{id} answer the service reads. */
+function coinResponse(prices: Record<string, unknown>) {
+  return { data: { market_data: { current_price: prices } } };
 }
 
 describe('RatesService', () => {
@@ -27,73 +41,97 @@ describe('RatesService', () => {
   });
 
   describe('getRate', () => {
-    it('fetches rate from CoinGecko and returns it', async () => {
-      mockedAxios.get
-        .mockResolvedValueOnce({ data: ['eur', 'usd', 'gbp'] })
-        .mockResolvedValueOnce({ data: { 'gridcoin-research': { eur: 0.0034 } } });
+    it('fetches the quote from CoinGecko and returns the rate', async () => {
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.0034, usd: 0.0039 }));
 
       const rate = await RatesService.getRate('eur');
 
       expect(rate).toBe(0.0034);
-      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+      expect(String(mockedAxios.get.mock.calls[0][0])).toContain('/coins/gridcoin-research');
     });
 
     it('returns cached rate on second call', async () => {
-      mockedAxios.get
-        .mockResolvedValueOnce({ data: ['eur', 'usd'] })
-        .mockResolvedValueOnce({ data: { 'gridcoin-research': { eur: 0.005 } } });
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005 }));
 
       const rate1 = await RatesService.getRate('eur');
       const rate2 = await RatesService.getRate('eur');
 
       expect(rate1).toBe(0.005);
       expect(rate2).toBe(0.005);
-      // currencies + rate = 2 calls, second getRate uses cache
-      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('serves every currency from the one quote', async () => {
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ usd: 0.0063, eur: 0.0054, gbp: 0.0046 }));
+
+      expect(await RatesService.getRate('usd')).toBe(0.0063);
+      expect(await RatesService.getRate('eur')).toBe(0.0054);
+      expect(await RatesService.getRate('gbp')).toBe(0.0046);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
     });
 
     it('throws for unsupported currency', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: ['eur', 'usd'] });
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005, usd: 0.006 }));
 
       await expect(RatesService.getRate('xyz')).rejects.toThrow('not supported');
     });
 
-    it('throws when CoinGecko returns no rate', async () => {
-      mockedAxios.get
-        .mockResolvedValueOnce({ data: ['eur'] })
-        .mockResolvedValueOnce({ data: { 'gridcoin-research': {} } });
+    it('throws when CoinGecko returns no prices', async () => {
+      mockedAxios.get.mockResolvedValueOnce({ data: { market_data: {} } });
 
-      await expect(RatesService.getRate('eur')).rejects.toThrow('Unable to fetch rate');
+      await expect(RatesService.getRate('eur')).rejects.toThrow('Invalid response');
+    });
+
+    it('drops prices that are not positive numbers', async () => {
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005, usd: null, gbp: 0 }));
+
+      expect(await RatesService.getRate('eur')).toBe(0.005);
+      await expect(RatesService.getRate('usd')).rejects.toBeInstanceOf(UnsupportedCurrencyError);
+      await expect(RatesService.getRate('gbp')).rejects.toBeInstanceOf(UnsupportedCurrencyError);
     });
 
     it('throws when CoinGecko request fails', async () => {
-      mockedAxios.get
-        .mockResolvedValueOnce({ data: ['eur'] })
-        .mockRejectedValueOnce(new Error('Network error'));
+      mockedAxios.get.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(RatesService.getRate('eur')).rejects.toThrow('Network error');
     });
 
     it('normalizes currency to lowercase', async () => {
-      mockedAxios.get
-        .mockResolvedValueOnce({ data: ['eur'] })
-        .mockResolvedValueOnce({ data: { 'gridcoin-research': { eur: 0.003 } } });
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.003 }));
 
       const rate = await RatesService.getRate('EUR');
       expect(rate).toBe(0.003);
     });
+
+    it('sends no key header while COINGECKO_API_KEY is unset', async () => {
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005 }));
+
+      await RatesService.getRate('eur');
+
+      expect(mockedAxios.get.mock.calls[0][1]?.headers).toEqual({});
+    });
+
+    it('sends the Demo key header when COINGECKO_API_KEY is set', async () => {
+      mockState.apiKey = 'cg-demo-test';
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005 }));
+
+      await RatesService.getRate('eur');
+
+      expect(mockedAxios.get.mock.calls[0][1]?.headers).toEqual({ 'x-cg-demo-api-key': 'cg-demo-test' });
+    });
   });
 
   describe('getSupportedCurrencies', () => {
-    it('fetches and returns currencies', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: ['eur', 'usd', 'gbp'] });
+    it('lists the currencies the quote carries', async () => {
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005, usd: 0.006, gbp: 0.004 }));
 
       const currencies = await RatesService.getSupportedCurrencies();
       expect(currencies).toEqual(['eur', 'usd', 'gbp']);
     });
 
     it('caches currencies on second call', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: ['eur', 'usd'] });
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005, usd: 0.006 }));
 
       await RatesService.getSupportedCurrencies();
       await RatesService.getSupportedCurrencies();
@@ -101,28 +139,29 @@ describe('RatesService', () => {
       expect(mockedAxios.get).toHaveBeenCalledTimes(1);
     });
 
+    it('shares the quote with getRate', async () => {
+      mockedAxios.get.mockResolvedValueOnce(coinResponse({ eur: 0.005, usd: 0.006 }));
+
+      await RatesService.getRate('eur');
+      expect(await RatesService.getSupportedCurrencies()).toEqual(['eur', 'usd']);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
     it('throws on invalid response', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: 'not an array' });
+      mockedAxios.get.mockResolvedValueOnce({ data: 'not an object' });
 
       await expect(RatesService.getSupportedCurrencies()).rejects.toThrow('Invalid response');
     });
   });
 });
 
-// Routes mocked axios by URL so concurrent tests don't depend on call order.
-function mockCoinGecko(opts: {
-  currencies?: string[] | Error;
-  price?: Record<string, number> | Error;
-}) {
+// Routes mocked axios through one implementation so concurrent tests don't
+// depend on call order.
+function mockCoinGecko(prices: Record<string, number> | Error) {
   mockedAxios.get.mockReset();
-  mockedAxios.get.mockImplementation(async (url: string) => {
-    if (url.includes('supported_vs_currencies')) {
-      if (opts.currencies instanceof Error) throw opts.currencies;
-      return { data: opts.currencies ?? ['usd', 'eur', 'gbp'] };
-    }
-    if (opts.price instanceof Error) throw opts.price;
-    const vs = new URL(url).searchParams.get('vs_currencies') as string;
-    return { data: { 'gridcoin-research': { [vs]: (opts.price ?? {})[vs] } } };
+  mockedAxios.get.mockImplementation(async () => {
+    if (prices instanceof Error) throw prices;
+    return coinResponse(prices);
   });
 }
 
@@ -135,18 +174,9 @@ function axiosError(status: number): Error {
   return err;
 }
 
-function priceCalls(): number {
-  return mockedAxios.get.mock.calls.filter(([u]) => String(u).includes('simple/price')).length;
-}
-
-function currencyCalls(): number {
-  return mockedAxios.get.mock.calls.filter(([u]) => String(u).includes('supported_vs')).length;
-}
-
-/** Age the cached quote for `key` so the next getRate has to go upstream. */
-function expireRateCache(key: string, ageMs: number): void {
-  const entry = (RatesService as any).rateCache.get(key);
-  entry.fetchedAt = Date.now() - ageMs;
+/** Age the cached quote so the next lookup has to go upstream. */
+function expireQuote(ageMs: number): void {
+  (RatesService as any).quote.fetchedAt = Date.now() - ageMs;
 }
 
 describe('RatesService upstream resilience', () => {
@@ -159,7 +189,7 @@ describe('RatesService upstream resilience', () => {
   });
 
   it('collapses concurrent calls for one currency into a single upstream fetch', async () => {
-    mockCoinGecko({ price: { eur: 0.0034 } });
+    mockCoinGecko({ eur: 0.0034 });
 
     const rates = await Promise.all([
       RatesService.getRate('eur'),
@@ -168,32 +198,31 @@ describe('RatesService upstream resilience', () => {
     ]);
 
     expect(rates).toEqual([0.0034, 0.0034, 0.0034]);
-    expect(priceCalls()).toBe(1);
-    expect(currencyCalls()).toBe(1);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 
-  it('fetches the currency list once for a parallel multi-currency burst', async () => {
+  it('answers a parallel multi-currency burst with one upstream call', async () => {
     // This is grcbazaar's access pattern; on a cold cache it used to be
     // 6 CoinGecko calls at once, which is what drew the 429.
-    mockCoinGecko({ price: { usd: 0.0063, eur: 0.0054, gbp: 0.0046 } });
+    mockCoinGecko({ usd: 0.0063, eur: 0.0054, gbp: 0.0046 });
 
     const rates = await Promise.all([
       RatesService.getRate('usd'),
       RatesService.getRate('eur'),
       RatesService.getRate('gbp'),
+      RatesService.getSupportedCurrencies(),
     ]);
 
-    expect(rates).toEqual([0.0063, 0.0054, 0.0046]);
-    expect(currencyCalls()).toBe(1);
-    expect(priceCalls()).toBe(3);
+    expect(rates).toEqual([0.0063, 0.0054, 0.0046, ['usd', 'eur', 'gbp']]);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 
   it('serves the last known rate when the refresh is rate-limited', async () => {
-    mockCoinGecko({ price: { eur: 0.005 } });
+    mockCoinGecko({ eur: 0.005 });
     expect(await RatesService.getRate('eur')).toBe(0.005);
 
-    expireRateCache('eur', 10 * 60 * 1000);
-    mockCoinGecko({ price: axiosError(429) });
+    expireQuote(10 * 60 * 1000);
+    mockCoinGecko(axiosError(429));
 
     expect(await RatesService.getRate('eur')).toBe(0.005);
     expect(RatesService.getHealth()).toMatchObject({
@@ -205,28 +234,41 @@ describe('RatesService upstream resilience', () => {
   });
 
   it('gives up once the cached rate is older than the stale window', async () => {
-    mockCoinGecko({ price: { eur: 0.005 } });
+    mockCoinGecko({ eur: 0.005 });
     await RatesService.getRate('eur');
 
-    expireRateCache('eur', 7 * 60 * 60 * 1000);
-    mockCoinGecko({ price: axiosError(429) });
+    expireQuote(7 * 60 * 60 * 1000);
+    mockCoinGecko(axiosError(429));
 
     await expect(RatesService.getRate('eur')).rejects.toThrow('429');
     expect(RatesService.getHealth()).toMatchObject({ ok: false, consecutiveFailures: 1 });
   });
 
+  it('counts one failure for a burst that shares the failed refresh', async () => {
+    mockCoinGecko(axiosError(503));
+
+    const results = await Promise.allSettled([
+      RatesService.getRate('usd'),
+      RatesService.getRate('eur'),
+      RatesService.getRate('gbp'),
+    ]);
+
+    expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected', 'rejected']);
+    expect(RatesService.getHealth()).toMatchObject({ ok: false, consecutiveFailures: 1 });
+  });
+
   it('recovers health once upstream answers again', async () => {
-    mockCoinGecko({ price: axiosError(503) });
+    mockCoinGecko(axiosError(503));
     await expect(RatesService.getRate('eur')).rejects.toThrow();
     expect(RatesService.getHealth().ok).toBe(false);
 
-    mockCoinGecko({ price: { eur: 0.006 } });
+    mockCoinGecko({ eur: 0.006 });
     expect(await RatesService.getRate('eur')).toBe(0.006);
     expect(RatesService.getHealth()).toMatchObject({ ok: true, degraded: false });
   });
 
   it('does not count an unsupported currency as an upstream failure', async () => {
-    mockCoinGecko({ currencies: ['eur', 'usd'] });
+    mockCoinGecko({ eur: 0.005, usd: 0.006 });
 
     await expect(RatesService.getRate('xyz')).rejects.toBeInstanceOf(UnsupportedCurrencyError);
     expect(RatesService.getHealth()).toMatchObject({
@@ -236,13 +278,14 @@ describe('RatesService upstream resilience', () => {
     });
   });
 
-  it('keeps serving the cached currency list when that call fails', async () => {
-    mockCoinGecko({ price: { eur: 0.005 } });
+  it('keeps serving the currency list long after the rates went stale', async () => {
+    mockCoinGecko({ usd: 0.006, eur: 0.005, gbp: 0.004 });
     await RatesService.getSupportedCurrencies();
 
-    (RatesService as any).currenciesCache.fetchedAt = Date.now() - 25 * 60 * 60 * 1000;
-    mockCoinGecko({ currencies: axiosError(429), price: { eur: 0.005 } });
+    expireQuote(25 * 60 * 60 * 1000);
+    mockCoinGecko(axiosError(429));
 
     expect(await RatesService.getSupportedCurrencies()).toEqual(['usd', 'eur', 'gbp']);
+    await expect(RatesService.getRate('eur')).rejects.toThrow('429');
   });
 });
