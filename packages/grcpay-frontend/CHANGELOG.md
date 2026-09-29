@@ -1,3 +1,11 @@
+# [grcpay-frontend-v1.3.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.0...grcpay-frontend-v1.3.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* clear the production audit for grcpay-frontend (yayson 4, baseline-browser-mapping) ([e352c26](https://github.com/gridcat/grcpay/commit/e352c26da43fa6e69c23f5c2d8945ce878053079))
+* fetch GRC quotes from CoinGecko's coin endpoint, optionally with a Demo key ([3f6f57f](https://github.com/gridcat/grcpay/commit/3f6f57f8edc321f1308293ecd7ae6ccf4994ecb5))
+
 # [grcpay-frontend-v1.3.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.2.1...grcpay-frontend-v1.3.0) (2026-08-28)
 
 
