@@ -222,6 +222,13 @@ jobs:
           name: Trust SSH key
           command: mkdir -p ~/.ssh/ && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
       - run:
+          # The workspace is the checkout from the start of the pipeline.
+          # A release job that ran before this one pushed its
+          # "chore(release)" commit, and semantic-release refuses to run
+          # on a branch behind the remote. Catch up first.
+          name: Sync with the remote branch
+          command: cd ~/app && git fetch origin "$CIRCLE_BRANCH" && git reset --hard "origin/$CIRCLE_BRANCH"
+      - run:
           name: Semantic release
           command: cd ~/app/packages/grcpay && npm run semantic-release
 
@@ -233,6 +240,13 @@ jobs:
       - run:
           name: Trust SSH key
           command: mkdir -p ~/.ssh/ && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
+      - run:
+          # The workspace is the checkout from the start of the pipeline.
+          # A release job that ran before this one pushed its
+          # "chore(release)" commit, and semantic-release refuses to run
+          # on a branch behind the remote. Catch up first.
+          name: Sync with the remote branch
+          command: cd ~/app && git fetch origin "$CIRCLE_BRANCH" && git reset --hard "origin/$CIRCLE_BRANCH"
       - run:
           name: Semantic release
           command: cd ~/app/packages/grcpay-frontend && npm run semantic-release
@@ -408,10 +422,13 @@ workflows:
             branches:
               only: master
 
+      # After grcpay-release, never beside it: both push a release commit
+      # to master, and semantic-release skips when the branch moved.
       - grcpay-frontend-release:
           context: semantic-release
           requires:
             - grcpay-frontend-checks
+            - grcpay-release
           filters:
             branches:
               only: master
