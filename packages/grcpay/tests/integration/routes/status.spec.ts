@@ -29,6 +29,15 @@ describe('GET /status', () => {
     expect(res.body.data.attributes).toHaveProperty('name', 'grcpay');
   });
 
+  it('reports rates upstream health', async () => {
+    const res = await request.get('/status');
+
+    expect(res.body.data.attributes.rates).toMatchObject({
+      ok: true,
+      degraded: false,
+    });
+  });
+
   it('returns JSON:API content type', async () => {
     const res = await request.get('/status');
 

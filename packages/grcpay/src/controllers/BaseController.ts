@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { JsonApiDocument } from 'yayson';
 import { PresenterInterface } from '../presenters/types';
 import { GenericInterface } from '../models/Generic';
 import { RepoListResults } from './types';
@@ -298,7 +299,7 @@ export class Controller {
   public render<T>(
     data: T | RepoListResults<T>,
     customPresenter?: PresenterInterface,
-  ): Record<string, unknown> {
+  ): JsonApiDocument {
     const presenter = customPresenter || this.presenter;
     if (this.isObject(data) && typeof data === 'object' && data !== null && 'rows' in data) {
       const list = data as RepoListResults<T>;

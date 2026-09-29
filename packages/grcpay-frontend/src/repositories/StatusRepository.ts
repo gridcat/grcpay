@@ -13,12 +13,12 @@ export class StatusRepository {
   ) {}
 
   public async getStatusData(): Promise<StatusEntity | null> {
-    const store = new Store();
     const { data: result } = await this.httpClient.get(
       `${process.env.NEXT_PUBLIC_API_URL}/status`,
     );
     if (result) {
-      const data: StatusRawData = store.sync(result);
+      // The status resource carries no id, which sync() refuses.
+      const data = Store.build(result) as unknown as StatusRawData;
       if (data) {
         return new StatusEntity(data);
       }

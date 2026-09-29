@@ -26,7 +26,7 @@
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "sharp": "^0.35.4",
-    "yayson": "^3.0.0"
+    "yayson": "^4.4.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
@@ -40,7 +40,6 @@
     "@semantic-release/release-notes-generator": "^13.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "19.2.14",
-    "@types/yayson": "^2.0.5",
     "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^9.39.4",

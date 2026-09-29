@@ -1,6 +1,6 @@
 import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 import { Request, Response } from 'express';
-import yayson from 'yayson';
+import yayson, { JsonApiDocument } from 'yayson';
 import { Controller } from './BaseController';
 import { WalletPresenter } from '../presenters/wallet.presenter';
 import { Wallet, WalletStatus } from '../models/Wallet';
@@ -87,11 +87,16 @@ export class WalletController extends Controller {
   }
 
   public async createWallet(input: WalletInput): Promise<void> {
-    const store = new Store();
     let data: WalletData;
 
     try {
-      data = store.sync(input);
+      // A create payload has no id, which sync() refuses, so build()
+      // reads it without storing. The resource type stays off the
+      // model; the schema still checks it, so it comes from the document.
+      data = {
+        ...Store.build(input as unknown as JsonApiDocument),
+        type: input.data?.type,
+      } as unknown as WalletData;
       const result = WalletSchema.validate(data);
       if (result.error && result.error.details) {
         throw new Error(result.error.details[0].message);

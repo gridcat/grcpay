@@ -120,7 +120,7 @@ Returns a QR code for the wallet address. Accepts optional `filter[width]` query
 
 ### `GET /rates`
 
-Returns the list of supported fiat currencies (from CoinGecko, cached 24 hours).
+Returns the list of supported fiat currencies (from CoinGecko, cached 5 minutes).
 
 ### `GET /rates/:currency`
 
@@ -255,6 +255,7 @@ Loaded via `nconf` with priority: CLI args > environment variables > `config.jso
 | `JOBS_INTERVAL` | no | `10` | Background job loop interval in seconds |
 | `HALFORD` | no | `100000000` | GRC to Halford conversion factor |
 | `MIN_FEE` | no | `0.001` | Transaction fee in GRC |
+| `COINGECKO_API_KEY` | no | -- | CoinGecko Demo API key, sent as `x-cg-demo-api-key` on rate lookups. Unset means keyless calls to the public API. |
 
 **Important:** `GRC_RPC_USER` and `GRC_RPC_PASSWORD` must be set as environment variables. They are not in `config.json`.
 

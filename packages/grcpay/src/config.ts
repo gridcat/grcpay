@@ -196,6 +196,11 @@ interface Config {
   // SQLite file — notably grc-control's read-only mount. Legacy
   // plaintext rows stay readable after the key is introduced.
   WEBHOOK_SECRET_KEY?: string;
+  // Optional CoinGecko Demo API key, sent as `x-cg-demo-api-key` on
+  // every rate lookup. Unset means keyless calls to the public API,
+  // which CoinGecko rate-limits per IP and has begun closing endpoint
+  // by endpoint.
+  COINGECKO_API_KEY?: string;
 }
 
 /**
@@ -248,6 +253,7 @@ nconf
       'WEBHOOK_RETRY_BASE_DELAY',
       'WEBHOOK_TIMEOUT_MS',
       'WEBHOOK_SECRET_KEY',
+      'COINGECKO_API_KEY',
     ],
     // nconf stores env values as strings. Parse the numeric settings
     // so downstream code can do arithmetic on them without Number(...)

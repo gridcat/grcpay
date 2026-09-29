@@ -1,6 +1,6 @@
 import { Request, Response, Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { RatesService } from '../services/rates/ratesService';
+import { RatesService, UnsupportedCurrencyError } from '../services/rates/ratesService';
 import { ErrorModel } from '../models/Error';
 import { ratesRateLimiter } from '../middleware/rateLimit';
 import { log } from '../lib/log';
@@ -31,14 +31,26 @@ ratesRouter.get('/:currency', async (req: Request, res: Response) => {
     });
   } catch (e: unknown) {
     // Don't echo the upstream/axios message to the client (it leaks
-    // CoinGecko/infra detail). Log it server-side; return a generic
-    // 400 — the only client-actionable case here is an unsupported
-    // currency.
+    // CoinGecko/infra detail) — log it server-side and classify.
     log.warn(`Rate lookup failed for '${req.params.currency}': ${e}`);
-    res.status(StatusCodes.BAD_REQUEST).send({
+
+    if (e instanceof UnsupportedCurrencyError) {
+      res.status(StatusCodes.BAD_REQUEST).send({
+        errors: [new ErrorModel(
+          StatusCodes.BAD_REQUEST,
+          'Currency not supported',
+        )],
+      });
+      return;
+    }
+
+    // Upstream is down or rate-limiting us and there's no cached quote
+    // left to serve. That's ours, not the caller's — reporting it as a
+    // 400 made routine CoinGecko blips look like integration bugs.
+    res.status(StatusCodes.SERVICE_UNAVAILABLE).send({
       errors: [new ErrorModel(
-        StatusCodes.BAD_REQUEST,
-        'Currency not supported or temporarily unavailable',
+        StatusCodes.SERVICE_UNAVAILABLE,
+        'Rates are temporarily unavailable',
       )],
     });
   }
@@ -60,9 +72,9 @@ ratesRouter.get('/', async (_req: Request, res: Response) => {
     });
   } catch (e: unknown) {
     log.error(`Supported-currencies lookup failed: ${e}`);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).send({
+    res.status(StatusCodes.SERVICE_UNAVAILABLE).send({
       errors: [new ErrorModel(
-        StatusCodes.INTERNAL_SERVER_ERROR,
+        StatusCodes.SERVICE_UNAVAILABLE,
         'Rates are temporarily unavailable',
       )],
     });
