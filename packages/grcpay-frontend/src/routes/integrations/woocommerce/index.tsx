@@ -10,7 +10,7 @@ import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
 import { Seo, SITE_NAME, SITE_URL } from '@/components/Seo';
 import { AUTHOR_GRIDCAT, breadcrumbList, PUBLISHER_ORG } from '@/lib/structuredData';
 import { PageWrapper } from '@/components/PageWrapper';
-import { Install, Configure, TestInstall } from './Chapters';
+import { Install, Configure } from './Chapters';
 
 export function Page() {
   return (
@@ -60,7 +60,6 @@ export function Page() {
           </Typography>
           <Install />
           <Configure />
-          <TestInstall />
         </Container>
         <Footer />
       </PageWrapper>
