@@ -1,3 +1,10 @@
+# [grcpay-frontend-v1.3.2](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.1...grcpay-frontend-v1.3.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* drop testnet link and sandbox section; bump next ([ec4bba5](https://github.com/gridcat/grcpay/commit/ec4bba589a8090cb188e347ff08ab7b07feda94a))
+
 # [grcpay-frontend-v1.3.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.0...grcpay-frontend-v1.3.1) (2026-09-29)
 
 
