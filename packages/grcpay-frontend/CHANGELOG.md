@@ -1,3 +1,31 @@
+# [grcpay-frontend-v1.3.2](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.1...grcpay-frontend-v1.3.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* drop testnet link and sandbox section; bump next ([ec4bba5](https://github.com/gridcat/grcpay/commit/ec4bba589a8090cb188e347ff08ab7b07feda94a))
+
+# [grcpay-frontend-v1.3.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.0...grcpay-frontend-v1.3.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* clear the production audit for grcpay-frontend (yayson 4, baseline-browser-mapping) ([e352c26](https://github.com/gridcat/grcpay/commit/e352c26da43fa6e69c23f5c2d8945ce878053079))
+* fetch GRC quotes from CoinGecko's coin endpoint, optionally with a Demo key ([3f6f57f](https://github.com/gridcat/grcpay/commit/3f6f57f8edc321f1308293ecd7ae6ccf4994ecb5))
+
+# [grcpay-frontend-v1.3.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.2.1...grcpay-frontend-v1.3.0) (2026-08-28)
+
+
+### Bug Fixes
+
+* color pallette issue ([96ea175](https://github.com/gridcat/grcpay/commit/96ea175a98522d02c759d31aa0f06f1e7578c1f0))
+* dependencies tree ([f9c19ba](https://github.com/gridcat/grcpay/commit/f9c19baea4950ecaa0aa5685447f2b9fb837686a))
+
+
+### Features
+
+* upgrade logo ([30c0402](https://github.com/gridcat/grcpay/commit/30c040225ad3b8789fc855eb9e825f7d33e8264c))
+
 # [grcpay-frontend-v1.2.1](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.2.0...grcpay-frontend-v1.2.1) (2026-07-04)
 
 
