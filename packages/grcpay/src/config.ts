@@ -61,6 +61,14 @@ interface Config {
   // is guaranteed to be accepted by the network without dipping
   // below the daemon's relay-fee floor.
   MIN_FEE: number;
+  // Floor (in GRC) for a wallet's split output. A split below it is
+  // dust: it stays with the primary recipient instead of becoming an
+  // output of its own. 0.1 GRC keeps a split well clear of the fee it
+  // would otherwise cost to spend later. Integrators apply the same
+  // floor on their side (grcbazaar: DONATION_DUST_HALFORD); a higher
+  // value here quietly hands splits between the two floors to the
+  // primary recipient.
+  SPLIT_DUST: number;
   // How long (seconds) past a wallet's terminal state we keep
   // watching the address for late-arriving customer payments —
   // the "a customer paid after the checkout page timed out"
@@ -229,6 +237,7 @@ nconf
       'GRC_RPC_HOST',
       'GRC_RPC_PORT',
       'PORT',
+      'SPLIT_DUST',
       'LATE_PAYMENT_WINDOW',
       'LATE_PAYMENT_CHECK_INTERVAL',
       'MAX_REFUND_ATTEMPTS',
@@ -273,6 +282,7 @@ nconf
     JOBS_INTERVAL: 1 * 10,
     HALFORD: 100000000,
     MIN_FEE: 0.001,
+    SPLIT_DUST: 0.1,
     LATE_PAYMENT_WINDOW: 60 * 60 * 24 * 7, // 7 days
     LATE_PAYMENT_CHECK_INTERVAL: 60 * 60, // 1 hour
     MAX_REFUND_ATTEMPTS: 5,
@@ -333,6 +343,7 @@ const NUMERIC_KEYS = [
   'JOBS_INTERVAL',
   'HALFORD',
   'MIN_FEE',
+  'SPLIT_DUST',
   'LATE_PAYMENT_WINDOW',
   'LATE_PAYMENT_CHECK_INTERVAL',
   'MAX_REFUND_ATTEMPTS',

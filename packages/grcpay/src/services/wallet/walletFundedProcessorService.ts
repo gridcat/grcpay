@@ -6,10 +6,25 @@ import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
+import { recordTxFee } from './txFee';
 import { canRetryRefund } from '../../lib/refundBackoff';
-import { halford2grc, grc2halford, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
+import {
+  halford2grc,
+  grc2halford,
+  MIN_FEE_HALFORD as minFeeHalford,
+  SPLIT_DUST_HALFORD as splitDustHalford,
+} from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
 import type { WalletRow } from '../../lib/database';
+import { parseSplits, WalletSplit } from '../../lib/splits';
+
+// A wallet's splits after the dust rule (see payoutSplits): `paid` are
+// outputs of their own, `folded` stay in the primary recipient's output.
+interface PayoutSplits {
+  paid: WalletSplit[];
+  folded: WalletSplit[];
+  paidHalford: bigint;
+}
 
 // outcome:
 //   none      — no refund needed (exact, dust, sender unknown). Forward as normal.
@@ -78,6 +93,74 @@ export class WalletFundedProcessorServiceClass {
 
     await this.processWithoutRecipient(withoutRecipient);
     await this.processWithRecipient(withRecipient);
+  }
+
+  // A wallet's splits divided by the dust rule: a split of at least
+  // SPLIT_DUST is an output of its own; a smaller one stays in the
+  // primary recipient's output and nothing is sent to its address.
+  // Splits are carved out of amount_required, not added to it.
+  // Creation checks the paid splits leave the recipient 2x MIN_FEE, but
+  // with the SPLIT_DUST of that moment; a split that would break that
+  // floor now (SPLIT_DUST lowered since) is folded the same way, so the
+  // recipient's output never goes non-positive.
+  private static payoutSplits(
+    wallet: Pick<WalletRow, 'splits' | 'amount_required'>,
+  ): PayoutSplits {
+    const paid: WalletSplit[] = [];
+    const folded: WalletSplit[] = [];
+    let paidHalford = BigInt(0);
+    for (const split of parseSplits(wallet.splits)) {
+      if (
+        split.halford >= splitDustHalford
+        && paidHalford + split.halford + minFeeHalford * BigInt(2) <= wallet.amount_required
+      ) {
+        paid.push(split);
+        paidHalford += split.halford;
+      } else {
+        folded.push(split);
+      }
+    }
+    return { paid, folded, paidHalford };
+  }
+
+  // Add the paid splits to a sendMany output map, aggregating by
+  // address: a map can't carry two outputs to the same key, and the
+  // refund sender may also be a split address.
+  private static addSplitOutputs(outputs: Record<string, number>, splits: PayoutSplits): void {
+    for (const split of splits.paid) {
+      const grc = halford2grc(split.halford).toNumber();
+      // eslint-disable-next-line no-param-reassign
+      outputs[split.address] = (outputs[split.address] ?? 0) + grc;
+    }
+  }
+
+  // Audit rows once the payout tx is on-chain: one per split, paid as
+  // its own output or folded into the primary as dust.
+  private static logSplits(
+    wallet: Pick<WalletRow, 'id' | 'recipient'>,
+    splits: PayoutSplits,
+    tx: string,
+  ): void {
+    for (const split of splits.paid) {
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id),
+        action: 'split_paid',
+        newStatus: tx,
+        detail: `${split.halford} halford to ${split.address}`,
+      });
+    }
+    for (const split of splits.folded) {
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId: Number(wallet.id),
+        action: 'split_folded',
+        newStatus: tx,
+        detail: split.halford < splitDustHalford
+          ? `${split.halford} halford to ${split.address} is below the `
+            + `${splitDustHalford} halford floor; kept in the payout to ${wallet.recipient}`
+          : `${split.halford} halford to ${split.address} would leave ${wallet.recipient} `
+            + `under 2x the fee; kept in the payout to ${wallet.recipient}`,
+      });
+    }
   }
 
   private shouldDeferForBackoff(wallet: WalletRow): boolean {
@@ -326,6 +409,7 @@ export class WalletFundedProcessorServiceClass {
       action: 'overpayment_refund',
       newStatus: tx,
     });
+    await recordTxFee(this.grcRpc, Number(wallet.id), tx);
     // The refund tx consumed refundAmountGrc at the output plus
     // MIN_FEE at the network fee → total debit == the original
     // overpayment in halford units. The amount the customer
@@ -387,7 +471,7 @@ export class WalletFundedProcessorServiceClass {
   private async recoverInterruptedSettlements(): Promise<void> {
     const stuck = await db
       .selectFrom('wallets')
-      .select(['id', 'tx_out'])
+      .select(['id', 'tx_out', 'recipient', 'splits', 'amount_required'])
       .where('status', '=', WalletStatus.funded)
       .where('tx_out', 'is not', null)
       // Mirror loadFunded's mode filter: settlement math assumes
@@ -428,6 +512,12 @@ export class WalletFundedProcessorServiceClass {
             oldStatus: '',
             newStatus: wallet.tx_out!,
           });
+          // The crashed cycle never got to its split rows.
+          WalletFundedProcessorServiceClass.logSplits(
+            wallet,
+            WalletFundedProcessorServiceClass.payoutSplits(wallet),
+            wallet.tx_out!,
+          );
         }
       }
     }
@@ -565,13 +655,19 @@ export class WalletFundedProcessorServiceClass {
     const recipient = wallet.recipient!;
     const overpayment = wallet.amount_recieved - wallet.amount_required;
     const refundGrc = halford2grc(overpayment).toNumber();
-    const forwardGrc = halford2grc(wallet.amount_required - minFeeHalford).toNumber();
+    // Paid splits come out of the merchant's output; the merchant's
+    // output still pays the fee.
+    const splits = WalletFundedProcessorServiceClass.payoutSplits(wallet);
+    const forwardGrc = halford2grc(
+      wallet.amount_required - splits.paidHalford - minFeeHalford,
+    ).toNumber();
 
     // Aggregate by address in case the buyer is also the merchant — a
     // sendMany map can't carry two outputs to the same key.
     const recipients: Record<string, number> = {};
     recipients[sender] = (recipients[sender] ?? 0) + refundGrc;
     recipients[recipient] = (recipients[recipient] ?? 0) + forwardGrc;
+    WalletFundedProcessorServiceClass.addSplitOutputs(recipients, splits);
 
     // One intent marker for the whole combined settle. `settle:<id>:<ms>`
     // — the trailing ms lets recoverInterruptedSettlements age-throttle
@@ -717,9 +813,10 @@ export class WalletFundedProcessorServiceClass {
       .where('id', '=', wallet.id)
       .where('status', '=', WalletStatus.funded)
       .executeTakeFirst();
+    const splitNote = splits.paid.length > 0 ? `, ${splits.paid.length} split(s)` : '';
     log.info(
       `Combined settle for ${wallet.address}: refunded ${refundGrc} GRC to ${sender}, `
-      + `forwarded ${forwardGrc} GRC to ${recipient} (tx ${tx}).`,
+      + `forwarded ${forwardGrc} GRC to ${recipient}${splitNote} (tx ${tx}).`,
     );
     if (flip.numUpdatedRows && Number(flip.numUpdatedRows) > 0) {
       getEventEmitter<DbLogMessage>().emit('log', {
@@ -732,6 +829,9 @@ export class WalletFundedProcessorServiceClass {
         walletId: Number(wallet.id), action: 'status', oldStatus: WalletStatus.funded, newStatus: WalletStatus.processed,
       });
     }
+    // The tx paid the splits whether or not the flip won a cancel race.
+    WalletFundedProcessorServiceClass.logSplits(wallet, splits, tx);
+    await recordTxFee(this.grcRpc, Number(wallet.id), tx);
   }
 
   private async settleRecipientLoop(fundedWallets: WalletRow[]): Promise<void> {
@@ -745,12 +845,14 @@ export class WalletFundedProcessorServiceClass {
       // ("transaction rejected — coins already spent"); one tx can't.
       // Only the FRESH case routes here — a row with refund_tx already
       // set is a pre-change crashed-mid-settle wallet that falls through
-      // to forward-the-remainder below. Requires required > fee so the
-      // merchant output is positive (sub-fee invoices fall through).
+      // to forward-the-remainder below. Requires the merchant's share
+      // (required less the paid splits) > fee so the merchant output is
+      // positive (sub-fee invoices fall through).
+      const splits = WalletFundedProcessorServiceClass.payoutSplits(wallet);
       if (
         wallet.refund_tx === null
         && wallet.amount_recieved - wallet.amount_required > minFeeHalford
-        && wallet.amount_required > minFeeHalford
+        && wallet.amount_required - splits.paidHalford > minFeeHalford
       ) {
         const combinedSender = await findSenderAddress(
           this.grcRpc,
@@ -800,8 +902,12 @@ export class WalletFundedProcessorServiceClass {
       // Forward math drains the hot wallet cleanly in either branch:
       //   success   → remaining = required, forward = required - fee
       //   none/abandoned → remaining = received, forward = received - fee
+      // Paid splits come off the merchant's forward; the fee stays on
+      // the merchant's side.
       const remainingHalford = wallet.amount_recieved - refund.debitedHalford;
-      const forwardAmountGrc = halford2grc(remainingHalford - minFeeHalford).toNumber();
+      const forwardAmountGrc = halford2grc(
+        remainingHalford - splits.paidHalford - minFeeHalford,
+      ).toNumber();
 
       // WAIT for the money to become spendable rather than hammering the
       // daemon with sends that cannot succeed.
@@ -928,11 +1034,25 @@ export class WalletFundedProcessorServiceClass {
 
       let tx: string | null = null;
       try {
-        tx = await this.grcRpc.sendToAddress(
-          wallet.recipient!,
-          forwardAmountGrc,
-          wallet.address,
-        );
+        if (splits.paid.length > 0) {
+          // Merchant and splits in ONE sendMany, for the same reason
+          // settleCombined uses one: several sends from the shared
+          // hot-wallet pool in the same tick race the daemon's coin
+          // cache.
+          const outputs: Record<string, number> = {};
+          outputs[wallet.recipient!] = forwardAmountGrc;
+          WalletFundedProcessorServiceClass.addSplitOutputs(outputs, splits);
+          // gridcoin-rpc: sendMany(account, recipients, minConf = 1,
+          // comment). The payment address rides as the wallet-local
+          // comment, as it does on the single-output sendToAddress.
+          tx = await this.grcRpc.sendMany('', outputs, 1, wallet.address);
+        } else {
+          tx = await this.grcRpc.sendToAddress(
+            wallet.recipient!,
+            forwardAmountGrc,
+            wallet.address,
+          );
+        }
 
         // CRASH-SAFETY: write tx_out + clear the intent marker in the
         // same statement, regardless of status. A crash between
@@ -986,6 +1106,9 @@ export class WalletFundedProcessorServiceClass {
             action: 'tx_out_after_cancel',
             newStatus: tx,
           });
+          // The tx still paid the splits.
+          WalletFundedProcessorServiceClass.logSplits(wallet, splits, tx);
+          await recordTxFee(this.grcRpc, Number(wallet.id), tx);
           continue;
         }
         getEventEmitter<DbLogMessage>().emit('log', {
@@ -1000,6 +1123,8 @@ export class WalletFundedProcessorServiceClass {
           oldStatus: '',
           newStatus: tx,
         });
+        WalletFundedProcessorServiceClass.logSplits(wallet, splits, tx);
+        await recordTxFee(this.grcRpc, Number(wallet.id), tx);
       } catch (e) {
         // CRITICAL distinction: if `tx` is non-null the forward
         // broadcast already landed on-chain — flipping status to
@@ -1125,7 +1250,7 @@ export class WalletFundedProcessorServiceClass {
         // marker-clear + status=error path.
         if (e instanceof TimeoutError) {
           log.error(
-            `CRITICAL: sendToAddress for ${wallet.address} timed out — the `
+            `CRITICAL: forward broadcast for ${wallet.address} timed out — the `
             + 'daemon may have committed the broadcast before the RPC reply '
             + `was dropped. Marker ${intentMarker} left in place; operator `
             + 'must reconcile against chain history.',

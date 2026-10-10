@@ -122,6 +122,7 @@ export class WalletController extends Controller {
       data.mode,
       data.lifespanSeconds,
       data.webhookUrl,
+      data.splits,
     );
 
     this.res

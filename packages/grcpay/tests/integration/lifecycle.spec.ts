@@ -145,6 +145,70 @@ describe('Wallet lifecycle integration', () => {
     expect(row.refund_amount).toBe(BigInt(200_000_000));
   });
 
+  it('splits the payout between the recipient and a split in one sendMany', async () => {
+    const SPLIT_ADDR = 'Slifecycle_2nd_67890abcdefghijklmn';
+    await insertWallet({
+      address: WALLET_ADDR,
+      recipient: RECIPIENT_ADDR,
+      // 0.8 GRC of a 10 GRC invoice
+      splits: JSON.stringify([{ address: SPLIT_ADDR, amount: '80000000' }]),
+      amount_required: BigInt(1_000_000_000),
+      status: WalletStatus.new,
+    });
+
+    mockRpc.getReceivedByAddress.mockResolvedValue(10);
+    await balanceUpdater.updateBalances();
+    await walletsService.findFundedWallets();
+    expect((await readWallet(WALLET_ADDR)).status).toBe(WalletStatus.funded);
+
+    mockRpc.sendMany.mockResolvedValue('split_tx');
+    await fundedProcessor.processFunded();
+
+    const row = await readWallet(WALLET_ADDR);
+    expect(row.status).toBe(WalletStatus.processed);
+    expect(row.tx_out).toBe('split_tx');
+    expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+    const [, outputs] = mockRpc.sendMany.mock.calls[0];
+    // The fee comes off the primary recipient; the split gets its amount.
+    expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(9.199, 6);
+    expect(outputs[SPLIT_ADDR]).toBeCloseTo(0.8, 8);
+  });
+
+  it('refunds everything, splits included, when a split wallet expires', async () => {
+    const longAgo = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
+    await insertWallet({
+      address: WALLET_ADDR,
+      recipient: RECIPIENT_ADDR,
+      splits: JSON.stringify([{ address: 'Slifecycle_2nd_67890abcdefghijklmn', amount: '80000000' }]),
+      amount_required: BigInt(1_000_000_000),
+      status: WalletStatus.new,
+      created_at: longAgo,
+    });
+    // The buyer paid 5 GRC and the window closed.
+    mockRpc.getReceivedByAddress.mockResolvedValue(5);
+    wireSender(mockRpc);
+    mockRpc.listTransactions.mockResolvedValue([
+      {
+        category: 'receive', address: WALLET_ADDR, txid: 'tx_in', amount: 5, time: 1,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ]);
+    mockRpc.sendToAddress.mockResolvedValue('refund_tx');
+
+    await walletsService.expireWallets();
+    expect((await readWallet(WALLET_ADDR)).status).toBe(WalletStatus.expired);
+    await expiredProcessor.processExpired();
+
+    const row = await readWallet(WALLET_ADDR);
+    expect(row.status).toBe(WalletStatus.refunded);
+    // One refund to the sender for the whole balance less the fee;
+    // nothing to the recipient or the split.
+    expect(mockRpc.sendMany).not.toHaveBeenCalled();
+    expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
+    expect(mockRpc.sendToAddress.mock.calls[0][0]).toBe(SENDER_ADDR);
+    expect(mockRpc.sendToAddress.mock.calls[0][1]).toBeCloseTo(4.999, 6);
+  });
+
   it('expires a stale wallet and refunds any partial balance to its sender', async () => {
     const longAgo = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
     await insertWallet({

@@ -19,6 +19,12 @@ export class WalletPresenter extends Presenter {
     return {
       address: instanse.address,
       recipient: instanse.recipient,
+      // Payout splits, amounts in halford like amountRequired; [] when
+      // the wallet has none.
+      splits: (instanse.splits ?? []).map(({ address, halford }) => ({
+        address,
+        amount: halford.toString(),
+      })),
       amountRequired: (instanse.amountRequired).toString(),
       amountRecieved: instanse.amountRecieved.toString(),
       amountPending: instanse.amountPending.toString(),

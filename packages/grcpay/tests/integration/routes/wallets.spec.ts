@@ -89,6 +89,95 @@ describe('POST /wallets', () => {
     expect(row.recipient).toBe('SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz');
   });
 
+  it('creates a wallet with splits and echoes them in halford', async () => {
+    const res = await request
+      .post('/wallets')
+      .set('Content-Type', 'application/vnd.api+json')
+      .send({
+        data: {
+          type: 'wallets',
+          attributes: {
+            amountRequired: 10,
+            recipient: 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz',
+            splits: [{ address: 'SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i', amount: 0.8 }],
+          },
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.attributes.splits).toEqual([{ address: 'SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i', amount: '80000000' }]);
+    expect(res.body.data.attributes.amountRequired).toBe('1000000000');
+    expect(mockRpc.validateAddress).toHaveBeenCalledWith('SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i');
+  });
+
+  it('reports an empty splits list on an ordinary wallet', async () => {
+    const res = await request
+      .post('/wallets')
+      .set('Content-Type', 'application/vnd.api+json')
+      .send({ data: { type: 'wallets', attributes: { amountRequired: 10 } } });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.attributes.splits).toEqual([]);
+  });
+
+  it('returns 400 for splits without a primary recipient', async () => {
+    const res = await request
+      .post('/wallets')
+      .set('Content-Type', 'application/vnd.api+json')
+      .send({
+        data: {
+          type: 'wallets',
+          attributes: {
+            amountRequired: 10,
+            splits: [{ address: 'SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i', amount: 0.8 }],
+          },
+        },
+      });
+
+    expect(res.status).toBe(400);
+    expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a split address equal to the recipient', async () => {
+    const res = await request
+      .post('/wallets')
+      .set('Content-Type', 'application/vnd.api+json')
+      .send({
+        data: {
+          type: 'wallets',
+          attributes: {
+            amountRequired: 10,
+            recipient: 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz',
+            splits: [{ address: 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz', amount: 0.8 }],
+          },
+        },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors[0].title).toMatch(/must differ from recipient/);
+    expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for splits that leave the recipient less than twice the fee', async () => {
+    const res = await request
+      .post('/wallets')
+      .set('Content-Type', 'application/vnd.api+json')
+      .send({
+        data: {
+          type: 'wallets',
+          attributes: {
+            amountRequired: 10,
+            recipient: 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz',
+            splits: [{ address: 'SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i', amount: 9.999 }],
+          },
+        },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors[0].title).toMatch(/splits must leave/);
+    expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
+  });
+
   it('returns 400 for missing amountRequired', async () => {
     const res = await request
       .post('/wallets')

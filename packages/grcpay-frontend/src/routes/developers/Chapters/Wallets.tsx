@@ -46,6 +46,7 @@ export function Wallets() {
     "attributes": {
       "address": "SXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "recipient": "SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i",
+      "splits": [],
       "amountRequired": "150000000",
       "amountRecieved": "0",
       "amountPending": "0",
@@ -117,6 +118,129 @@ export function Wallets() {
           forward-to-recipient step is skipped.
         </Typography>
 
+        <Typography variant="h6" component="h3" sx={{ pt: 3, pb: 1 }}>
+          Splits
+        </Typography>
+        <Typography gutterBottom variant="body1" component="p">
+          A wallet can split its payout. Pass
+          {' '}
+          <code>splits</code>
+          , a list of up to 10
+          {' '}
+          <code>{'{ address, amount }'}</code>
+          {' '}
+          entries with amounts in GRC, together with
+          {' '}
+          <code>recipient</code>
+          . Each split address receives its amount in the same
+          transaction that pays the recipient, for example a marketplace
+          donation or a platform fee. The payer still makes one payment
+          of
+          {' '}
+          <code>amountRequired</code>
+          ; the splits are carved out of it, not added on top.
+        </Typography>
+        <CodeBlock
+          caption="Request with two splits"
+          language="bash"
+          code={`curl -X POST ${SITE_URL}/api/wallets \\
+  -H 'Content-Type: application/vnd.api+json' \\
+  -d '{
+    "data": {
+      "type": "wallets",
+      "attributes": {
+        "amountRequired": 10,
+        "recipient": "SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i",
+        "splits": [
+          { "address": "SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz", "amount": 0.8 },
+          { "address": "SCnF1kyBDtbBV1fSMTD3cGahRsywVj8Rnq", "amount": 0.5 }
+        ]
+      }
+    }
+  }'`}
+        />
+        <Box component="ul" sx={{ pl: 4, mt: 0, mb: 2 }}>
+          <li>
+            <Typography variant="body1">
+              On payout each split address receives exactly its
+              {' '}
+              <code>amount</code>
+              . The recipient receives
+              {' '}
+              <code>amountRequired − sum(splits) − MIN_FEE</code>
+              : the network fee still comes off the recipient&apos;s
+              output, as it does without splits. An overpayment refund
+              rides in the same
+              {' '}
+              <code>sendmany</code>
+              , so one transaction pays everyone.
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body1">
+              A split under
+              {' '}
+              <code>SPLIT_DUST</code>
+              {' '}
+              (0.1 GRC by default) is dust. It is not sent; it stays in
+              the recipient&apos;s output. Each decision is written to
+              {' '}
+              <code>db_logs</code>
+              {' '}
+              as
+              {' '}
+              <code>split_folded</code>
+              {' '}
+              or
+              {' '}
+              <code>split_paid</code>
+              .
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body1">
+              Refunds ignore the splits. An expired or cancelled wallet
+              returns everything the payer sent, splits included; a split
+              address only ever receives from a settled payout.
+            </Typography>
+          </li>
+          <li>
+            <Typography variant="body1">
+              Splits need a
+              {' '}
+              <code>recipient</code>
+              . Each split address must be unique and differ from it,
+              and the splits together must leave the recipient at least
+              {' '}
+              <code>2 × MIN_FEE</code>
+              {' '}
+              of
+              {' '}
+              <code>amountRequired</code>
+              . Splits under
+              {' '}
+              <code>SPLIT_DUST</code>
+              {' '}
+              are ignored: they don&apos;t count toward that, and the
+              recipient is paid as if they weren&apos;t there.
+              GRCpay checks every split address with the wallet daemon
+              before it creates the payment address, the same check
+              {' '}
+              <code>recipient</code>
+              {' '}
+              gets. Wallet records list them as
+              {' '}
+              <code>splits</code>
+              {' '}
+              with amounts as halford strings, or
+              {' '}
+              <code>[]</code>
+              {' '}
+              when unused.
+            </Typography>
+          </li>
+        </Box>
+
         <Endpoint method="GET" path="/api/wallets/:address" title="Look up a wallet" />
         <Typography gutterBottom variant="body1" component="p">
           Reads are token-gated. Without the
@@ -145,6 +269,7 @@ export function Wallets() {
     "attributes": {
       "address": "SXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "recipient": "SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i",
+      "splits": [],
       "amountRequired": "150000000",
       "amountRecieved": "200000000",
       "amountPending": "0",
