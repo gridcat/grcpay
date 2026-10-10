@@ -174,6 +174,28 @@ describe('WalletFundedProcessorService', () => {
       expect(after.refund_amount).toBeNull();
     });
 
+    it('records the fee the daemon charged for the forward', async () => {
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendToAddress.mockResolvedValue('tx_output_hash_123');
+      mockRpc.getTransaction.mockResolvedValue({ fee: -0.002 } as never);
+      mockRpc.getRawTransaction.mockResolvedValue('ab'.repeat(1078) as never);
+
+      await service.processFunded();
+
+      expect(mockEmit).toHaveBeenCalledWith('log', {
+        walletId: Number(row.id),
+        action: 'tx_fee',
+        newStatus: 'tx_output_hash_123',
+        detail: 'charged 200000 halford, reserved 100000 halford, 1078 bytes',
+      });
+    });
+
     it('refunds the full overpayment and forwards required-minus-fee in ONE sendMany', async () => {
       const row = await insertWallet({
         address: WALLET_ADDR,
