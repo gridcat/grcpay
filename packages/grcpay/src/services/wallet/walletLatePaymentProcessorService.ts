@@ -6,6 +6,7 @@ import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
+import { recordTxFee } from './txFee';
 import { canRetryRefund } from '../../lib/refundBackoff';
 import { grc2halford, halford2grc, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
@@ -306,6 +307,7 @@ export class WalletLatePaymentProcessorServiceClass {
       action: 'late_refund',
       newStatus: tx,
     });
+    await recordTxFee(this.grcRpc, Number(wallet.id), tx);
   }
 }
 

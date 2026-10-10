@@ -6,6 +6,7 @@ import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findSenderAddress } from './senderLookup';
+import { recordTxFee } from './txFee';
 import { canRetryRefund } from '../../lib/refundBackoff';
 import { halford2grc, grc2halford, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
@@ -326,6 +327,7 @@ export class WalletFundedProcessorServiceClass {
       action: 'overpayment_refund',
       newStatus: tx,
     });
+    await recordTxFee(this.grcRpc, Number(wallet.id), tx);
     // The refund tx consumed refundAmountGrc at the output plus
     // MIN_FEE at the network fee → total debit == the original
     // overpayment in halford units. The amount the customer
@@ -732,6 +734,7 @@ export class WalletFundedProcessorServiceClass {
         walletId: Number(wallet.id), action: 'status', oldStatus: WalletStatus.funded, newStatus: WalletStatus.processed,
       });
     }
+    await recordTxFee(this.grcRpc, Number(wallet.id), tx);
   }
 
   private async settleRecipientLoop(fundedWallets: WalletRow[]): Promise<void> {
@@ -986,6 +989,7 @@ export class WalletFundedProcessorServiceClass {
             action: 'tx_out_after_cancel',
             newStatus: tx,
           });
+          await recordTxFee(this.grcRpc, Number(wallet.id), tx);
           continue;
         }
         getEventEmitter<DbLogMessage>().emit('log', {
@@ -1000,6 +1004,7 @@ export class WalletFundedProcessorServiceClass {
           oldStatus: '',
           newStatus: tx,
         });
+        await recordTxFee(this.grcRpc, Number(wallet.id), tx);
       } catch (e) {
         // CRITICAL distinction: if `tx` is non-null the forward
         // broadcast already landed on-chain — flipping status to
