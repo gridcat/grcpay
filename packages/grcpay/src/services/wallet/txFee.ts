@@ -22,7 +22,10 @@ export async function recordTxFee(
   txid: string,
 ): Promise<void> {
   try {
-    const tx = await rpc.getTransaction(txid);
+    const [tx, hex] = await Promise.all([
+      rpc.getTransaction(txid),
+      rpc.getRawTransaction(txid, false),
+    ]);
     // gettransaction reports the fee as a NEGATIVE amount, and the
     // gridcoin-rpc Transaction type doesn't declare the field at all.
     const { fee } = tx as { fee?: unknown };
@@ -31,7 +34,6 @@ export async function recordTxFee(
       return;
     }
     const chargedHalford = grc2halford(Math.abs(fee));
-    const hex = await rpc.getRawTransaction(txid, false);
     const bytes = hex.length / 2;
 
     getEventEmitter<DbLogMessage>().emit('log', {

@@ -39,7 +39,6 @@ describe('recordTxFee', () => {
 
     await recordTxFee(mockRpc as never, 7, 'tx_abc');
 
-    expect(mockRpc.getRawTransaction).not.toHaveBeenCalled();
     expect(mockEmit).not.toHaveBeenCalled();
   });
 
