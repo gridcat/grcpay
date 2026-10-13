@@ -1,3 +1,11 @@
+# [grcpay-frontend-v1.3.3](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.2...grcpay-frontend-v1.3.3) (2026-10-13)
+
+
+### Bug Fixes
+
+* dependencies ([9af6f5f](https://github.com/gridcat/grcpay/commit/9af6f5f0ab98695bebd784c1528cde0d7faf34bc))
+* fix dependencies ([5b9ad2e](https://github.com/gridcat/grcpay/commit/5b9ad2e05b0113e0f0b5c2dbc60b4d7e648a73db))
+
 # [grcpay-frontend-v1.3.2](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.1...grcpay-frontend-v1.3.2) (2026-10-03)
 
 
