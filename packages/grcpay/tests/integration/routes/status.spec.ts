@@ -8,6 +8,7 @@ vi.mock('../../../src/lib/gridcoin', () => ({
     getReceivedByAddress: vi.fn(),
   },
   connect: vi.fn().mockResolvedValue(true),
+  getWalletHealth: vi.fn().mockReturnValue({ ok: false, lastSuccessAt: null }),
 }));
 
 // eslint-disable-next-line import/first
@@ -36,6 +37,13 @@ describe('GET /status', () => {
       ok: true,
       degraded: false,
     });
+  });
+
+  it('reports wallet daemon health', async () => {
+    const res = await request.get('/status');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.attributes.wallet).toMatchObject({ ok: false });
   });
 
   it('returns JSON:API content type', async () => {
