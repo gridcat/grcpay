@@ -1,3 +1,10 @@
+# [grcpay-v1.1.4](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.3...grcpay-v1.1.4) (2026-11-03)
+
+
+### Bug Fixes
+
+* bump next to 16.4.4 and patch body-parser, follow-redirects, joi, qs ([c721a23](https://github.com/gridcat/grcpay/commit/c721a236827f5a6b2e7ef9baa828c1d06a877027))
+
 # [grcpay-v1.1.3](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.2...grcpay-v1.1.3) (2026-10-13)
 
 
