@@ -6,6 +6,11 @@ import { createMockRpc } from '../../helpers/mocks';
 import { db } from '../../../src/lib/db';
 import { setupTestDb, truncateAll, insertWallet } from '../../helpers/db';
 
+// wallets.splits JSON for a list of [address, halford] pairs.
+function splitsJson(splits: [string, bigint][]): string {
+  return JSON.stringify(splits.map(([address, halford]) => ({ address, amount: halford.toString() })));
+}
+
 const mockEmit = vi.hoisted(() => vi.fn());
 vi.mock('../../../src/lib/event', () => ({
   getEventEmitter: () => ({ emit: mockEmit, on: vi.fn() }),
@@ -172,6 +177,28 @@ describe('WalletFundedProcessorService', () => {
       expect(after.tx_out).toBe('tx_output_hash_123');
       expect(after.refund_tx).toBeNull();
       expect(after.refund_amount).toBeNull();
+    });
+
+    it('records the fee the daemon charged for the forward', async () => {
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendToAddress.mockResolvedValue('tx_output_hash_123');
+      mockRpc.getTransaction.mockResolvedValue({ fee: -0.002 } as never);
+      mockRpc.getRawTransaction.mockResolvedValue('ab'.repeat(1078) as never);
+
+      await service.processFunded();
+
+      expect(mockEmit).toHaveBeenCalledWith('log', {
+        walletId: Number(row.id),
+        action: 'tx_fee',
+        newStatus: 'tx_output_hash_123',
+        detail: 'charged 200000 halford, reserved 100000 halford, 1078 bytes',
+      });
     });
 
     it('refunds the full overpayment and forwards required-minus-fee in ONE sendMany', async () => {
@@ -698,6 +725,294 @@ describe('WalletFundedProcessorService', () => {
       expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
         action: 'tx_out',
         newStatus: 'txhash_456',
+      }));
+    });
+  });
+
+  describe('splits', () => {
+    const SPLIT_A = 'Ssplit_a_addr_1234567890abcdefghij';
+    const SPLIT_B = 'Ssplit_b_addr_1234567890abcdefghij';
+
+    it('pays a split in the same sendMany, fee off the primary', async () => {
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)]]), // 0.8 GRC of the 10 GRC invoice
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendMany.mockResolvedValue('split_tx');
+
+      await service.processFunded();
+
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      const [account, outputs, minConf, comment] = mockRpc.sendMany.mock.calls[0];
+      expect(account).toBe('');
+      // Primary: 10 - 0.8 - 0.001. Split: exactly its amount.
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(9.199, 6);
+      expect(outputs[SPLIT_A]).toBeCloseTo(0.8, 8);
+      expect(Object.keys(outputs)).toHaveLength(2);
+      // Tagged with the payment address like the single-output forward.
+      expect(minConf).toBe(1);
+      expect(comment).toBe(WALLET_ADDR);
+
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('split_tx');
+      expect(after.refund_tx).toBeNull();
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        walletId: Number(row.id),
+        action: 'split_paid',
+        newStatus: 'split_tx',
+      }));
+    });
+
+    it('refunds an overpayment, pays the primary and the split in ONE sendMany', async () => {
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_200_000_000),
+      });
+      wireFindSender(mockRpc);
+      mockRpc.sendMany.mockResolvedValue('split_settle_tx');
+
+      await service.processFunded();
+
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      const [, outputs] = mockRpc.sendMany.mock.calls[0];
+      // Buyer gets the whole overpayment back; the split its amount;
+      // the primary what is left less the one fee.
+      expect(outputs[SENDER_ADDR]).toBeCloseTo(2, 6);
+      expect(outputs[SPLIT_A]).toBeCloseTo(0.8, 8);
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(9.199, 6);
+
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('split_settle_tx');
+      expect(after.refund_tx).toBe('split_settle_tx');
+      expect(after.refund_amount).toBe(BigInt(200_000_000));
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split_paid', newStatus: 'split_settle_tx',
+      }));
+    });
+
+    it('folds a dust split back into the primary and forwards exactly as without one', async () => {
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(9_999_999)]]), // one halford under the 0.1 GRC floor
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendToAddress.mockResolvedValue('folded_tx');
+
+      await service.processFunded();
+
+      // Same single sendToAddress, same amount, as a wallet with no
+      // splits at all.
+      expect(mockRpc.sendMany).not.toHaveBeenCalled();
+      expect(mockRpc.sendToAddress).toHaveBeenCalledTimes(1);
+      expect(mockRpc.sendToAddress).toHaveBeenCalledWith(RECIPIENT_ADDR, expect.any(Number), WALLET_ADDR);
+      expect(mockRpc.sendToAddress.mock.calls[0][1]).toBeCloseTo(9.999, 6);
+
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.processed);
+      expect(after.tx_out).toBe('folded_tx');
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        walletId: Number(row.id),
+        action: 'split_folded',
+        newStatus: 'folded_tx',
+      }));
+      const paid = mockEmit.mock.calls.filter((c) => c[1].action === 'split_paid');
+      expect(paid).toHaveLength(0);
+    });
+
+    it('pays a split at exactly the dust floor', async () => {
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(10_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendMany.mockResolvedValue('floor_tx');
+
+      await service.processFunded();
+
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+      const [, outputs] = mockRpc.sendMany.mock.calls[0];
+      expect(outputs[SPLIT_A]).toBeCloseTo(0.1, 8);
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(9.899, 6);
+    });
+
+    it('still settles a row whose split address equals the recipient (refused at creation) as one output', async () => {
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[RECIPIENT_ADDR, BigInt(80_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendMany.mockResolvedValue('same_tx');
+
+      await service.processFunded();
+
+      const [, outputs] = mockRpc.sendMany.mock.calls[0];
+      expect(Object.keys(outputs)).toEqual([RECIPIENT_ADDR]);
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(9.999, 6);
+    });
+
+    it('waits for spendable funds covering every output and the fee', async () => {
+      const row = await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      // 9.5 GRC spendable covers the primary alone but not the whole
+      // 10 GRC payout: nothing may be broadcast.
+      mockRpc.getWalletInfo.mockResolvedValue({ balance: 9.5 });
+
+      await service.processFunded();
+
+      expect(mockRpc.sendMany).not.toHaveBeenCalled();
+      expect(mockRpc.sendToAddress).not.toHaveBeenCalled();
+      const after = await readWallet(row.id);
+      expect(after.status).toBe(WalletStatus.funded);
+      expect(after.tx_out).toBeNull();
+    });
+
+    it('pays several splits as outputs of one sendMany', async () => {
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)], [SPLIT_B, BigInt(150_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendMany.mockResolvedValue('multi_tx');
+
+      await service.processFunded();
+
+      expect(mockRpc.sendMany).toHaveBeenCalledTimes(1);
+      const [, outputs] = mockRpc.sendMany.mock.calls[0];
+      // Primary: 10 - 0.8 - 1.5 - 0.001.
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(7.699, 6);
+      expect(outputs[SPLIT_A]).toBeCloseTo(0.8, 8);
+      expect(outputs[SPLIT_B]).toBeCloseTo(1.5, 8);
+      const paid = mockEmit.mock.calls.filter((c) => c[1].action === 'split_paid');
+      expect(paid).toHaveLength(2);
+    });
+
+    it('pays the splits above the floor and folds the ones below it', async () => {
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)], [SPLIT_B, BigInt(5_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      mockRpc.sendMany.mockResolvedValue('mixed_tx');
+
+      await service.processFunded();
+
+      const [, outputs] = mockRpc.sendMany.mock.calls[0];
+      // The 0.05 GRC split stays with the primary: 10 - 0.8 - 0.001.
+      expect(Object.keys(outputs).sort()).toEqual([RECIPIENT_ADDR, SPLIT_A].sort());
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(9.199, 6);
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split_folded', newStatus: 'mixed_tx',
+      }));
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split_paid', newStatus: 'mixed_tx',
+      }));
+    });
+    it('folds a split that would leave the primary under 2x the fee', async () => {
+      // A row the schema would have refused (e.g. created as 0.95 + dust
+      // under a higher SPLIT_DUST): paying the 0.1 GRC split would push
+      // the primary output negative.
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(95_000_000)], [SPLIT_B, BigInt(10_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(100_000_000),
+        amount_recieved: BigInt(100_000_000),
+      });
+      mockRpc.sendMany.mockResolvedValue('floor_tx');
+
+      await service.processFunded();
+
+      const [, outputs] = mockRpc.sendMany.mock.calls[0];
+      // 1 - 0.95 - 0.001; the 0.1 GRC split stays with the primary.
+      expect(Object.keys(outputs).sort()).toEqual([RECIPIENT_ADDR, SPLIT_A].sort());
+      expect(outputs[RECIPIENT_ADDR]).toBeCloseTo(0.049, 8);
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split_folded',
+        newStatus: 'floor_tx',
+        detail: expect.stringMatching(/under 2x the fee/),
+      }));
+    });
+  });
+
+  describe('split audit rows', () => {
+    const SPLIT_A = 'Ssplit_a_addr_1234567890abcdefghij';
+
+    it('logs the splits when recovery finishes a settle that crashed before its flip', async () => {
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+        tx_out: 'crashed_tx',
+      });
+
+      await service.processFunded();
+
+      expect(mockRpc.sendMany).not.toHaveBeenCalled();
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split_paid', newStatus: 'crashed_tx',
+      }));
+    });
+
+    it('logs the splits when a cancel wins the race after the forward broadcast', async () => {
+      await insertWallet({
+        address: WALLET_ADDR,
+        recipient: RECIPIENT_ADDR,
+        splits: splitsJson([[SPLIT_A, BigInt(80_000_000)]]),
+        status: WalletStatus.funded,
+        amount_required: BigInt(1_000_000_000),
+        amount_recieved: BigInt(1_000_000_000),
+      });
+      // The cancel lands while the forward is on its way out.
+      mockRpc.sendMany.mockImplementation(async () => {
+        await db.updateTable('wallets').set({ status: WalletStatus.expired })
+          .where('address', '=', WALLET_ADDR).execute();
+        return 'raced_tx';
+      });
+
+      await service.processFunded();
+
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'tx_out_after_cancel', newStatus: 'raced_tx',
+      }));
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split_paid', newStatus: 'raced_tx',
       }));
     });
   });

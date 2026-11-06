@@ -100,6 +100,13 @@ const envVars: EnvVar[] = [
       'Exponential backoff base for refund retries, in seconds. After failure N the next attempt is gated by base * 2^(N-1), so with the default 30s the intervals are 30s, 1m, 2m, 4m, spanning ~7.5 minutes before MAX_REFUND_ATTEMPTS trips. The window exists so a real human operator has time to unlock a locked wallet (the usual root cause of a refund RPC failure) before GRCpay declares the refund hopeless.',
   },
   {
+    name: 'SPLIT_DUST',
+    required: false,
+    default: '0.1',
+    description:
+      'Floor, in GRC, for a split\'s output. A split below it is dust: it is not sent to its address and stays in the primary recipient\'s payout. 0.1 GRC keeps a split well clear of the fee it would cost to spend later. Set to 0 to send every split, however small. Integrators that fold small splits on their side use the same 0.1 GRC; raise this above theirs and a split between the two floors quietly goes to the primary recipient instead.',
+  },
+  {
     name: 'MIN_CONFIRMATIONS',
     required: false,
     default: '2',

@@ -2,9 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Webhook-aware WalletSchema cases. Config is mocked so we can toggle
 // the feature flag. MIN_FEE is included because the amountRequired rule
-// floors at 2x MIN_FEE (evaluated when the schema is built).
+// floors at 2x MIN_FEE (evaluated when the schema is built); HALFORD and
+// SPLIT_DUST because lib/nomination derives its halford constants from
+// them at import, and the schema imports it for the splits rule.
 vi.mock('../../../src/config', () => ({
-  config: { WEBHOOKS_ENABLED: true, WEBHOOK_ALLOW_PRIVATE: false, MIN_FEE: 0.001 },
+  config: {
+    WEBHOOKS_ENABLED: true,
+    WEBHOOK_ALLOW_PRIVATE: false,
+    MIN_FEE: 0.001,
+    HALFORD: 100_000_000,
+    SPLIT_DUST: 0.1,
+  },
 }));
 
 // eslint-disable-next-line import/first

@@ -5,6 +5,11 @@ import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { grc2halford } from '../../lib/nomination';
+import {
+  SplitInput,
+  serializeSplits,
+  toWalletSplits,
+} from '../../lib/splits';
 import { generateToken, hashToken } from '../../lib/walletToken';
 import { encryptWebhookSecret } from '../../lib/webhookSecret';
 
@@ -19,10 +24,19 @@ export class WalletsCreatorServiceClass {
     mode?: WalletMode,
     lifespanSeconds?: number,
     webhookUrl?: string,
+    splits?: SplitInput[],
   ) {
     const resolvedMode = mode ?? WalletMode.checkout;
     if (!amountRequired) {
       throw new Error('Required amount is required');
+    }
+    // The schema already requires a recipient to split with; the
+    // service refuses the same so a direct caller cannot store splits
+    // that processWithoutRecipient would mark processed with the shares
+    // left sitting in the hot wallet.
+    const walletSplits = toWalletSplits(splits);
+    if (walletSplits.length > 0 && !recipient) {
+      throw new Error('splits require a recipient');
     }
 
     // Preflight: if the caller supplied a forwarding recipient, ask
@@ -50,6 +64,21 @@ export class WalletsCreatorServiceClass {
       }
       if (!validation.isvalid) {
         throw new Error(`Recipient ${recipient} is not a valid Gridcoin address for this network`);
+      }
+    }
+    // Same preflight for every split address: splits are paid in the
+    // same sendMany as the primary forward, so one bad address would
+    // otherwise fail the whole payout at settlement time.
+    for (const { address: splitAddress } of walletSplits) {
+      let validation;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        validation = await this.grcRpc.validateAddress(splitAddress);
+      } catch (e) {
+        throw new Error(`Failed to validate split address: ${e}`);
+      }
+      if (!validation.isvalid) {
+        throw new Error(`Split address ${splitAddress} is not a valid Gridcoin address for this network`);
       }
     }
 
@@ -88,6 +117,7 @@ export class WalletsCreatorServiceClass {
         .values({
           address,
           recipient: recipient ?? null,
+          splits: serializeSplits(walletSplits),
           amount_required: amountRequiredHalford,
           amount_recieved: BigInt(0),
           amount_pending: BigInt(0),
@@ -169,6 +199,14 @@ export class WalletsCreatorServiceClass {
         walletId,
         action: 'lifespan_seconds',
         newStatus: String(lifespanSeconds),
+      });
+    }
+    for (const split of walletSplits) {
+      getEventEmitter<DbLogMessage>().emit('log', {
+        walletId,
+        action: 'split',
+        newStatus: split.address,
+        detail: `${split.halford} halford`,
       });
     }
 

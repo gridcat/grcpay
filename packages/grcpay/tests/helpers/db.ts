@@ -4,6 +4,7 @@ import * as webhooks from '../../src/migrations/20260519120000_webhooks';
 import * as pendingBroadcast from '../../src/migrations/20260526120000_pending_broadcast';
 import * as dbLogsDetail from '../../src/migrations/20260529130000_db_logs_detail';
 import * as incomingTxsSender from '../../src/migrations/20260529140000_incoming_txs_sender';
+import * as walletSplits from '../../src/migrations/20261006000000_wallet_splits';
 import { db, now } from '../../src/lib/db';
 import { migrateToLatest } from '../../src/lib/migrate';
 import { WalletStatus, WalletMode } from '../../src/models/Wallet';
@@ -12,6 +13,7 @@ import type { WalletRow } from '../../src/lib/database';
 interface InsertWalletOverrides {
   address?: string;
   recipient?: string | null;
+  splits?: string | null;
   amount_required?: bigint;
   amount_recieved?: bigint;
   amount_pending?: bigint;
@@ -49,6 +51,7 @@ export const bundledMigrations: Record<string, Migration> = {
   '20260526120000_pending_broadcast': pendingBroadcast,
   '20260529130000_db_logs_detail': dbLogsDetail,
   '20260529140000_incoming_txs_sender': incomingTxsSender,
+  '20261006000000_wallet_splits': walletSplits,
 };
 
 // Keys are the bare filenames the production FileMigrationProvider would
@@ -95,6 +98,7 @@ export async function insertWallet(overrides: InsertWalletOverrides = {}): Promi
     .values({
       address: overrides.address ?? 'S1234567890abcdef1234567890abcdef12',
       recipient: overrides.recipient ?? null,
+      splits: overrides.splits ?? null,
       amount_required: overrides.amount_required ?? BigInt(1_000_000_000), // 10 GRC
       amount_recieved: overrides.amount_recieved ?? BigInt(0),
       amount_pending: overrides.amount_pending ?? BigInt(0),

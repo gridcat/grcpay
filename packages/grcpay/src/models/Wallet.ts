@@ -1,5 +1,6 @@
 import { GenericInterface } from './Generic';
 import type { WalletRow } from '../lib/database';
+import { parseSplits, WalletSplit } from '../lib/splits';
 
 export enum WalletStatus {
   new = 'new',
@@ -38,6 +39,10 @@ export class Wallet implements GenericInterface {
   public address!: string;
 
   public recipient!: string | null;
+
+  // Payout splits, each a fixed halford share of amountRequired; empty
+  // when the wallet has none (see lib/splits.ts).
+  public splits!: WalletSplit[];
 
   public amountRequired!: bigint;
 
@@ -105,6 +110,7 @@ export class Wallet implements GenericInterface {
     'attributes',
     'address',
     'recipient',
+    'splits',
     'amountRequired',
     'amountRecieved',
     'amountPending',
@@ -128,6 +134,7 @@ export class Wallet implements GenericInterface {
     wallet.id = Number(row.id);
     wallet.address = row.address;
     wallet.recipient = row.recipient;
+    wallet.splits = parseSplits(row.splits);
     wallet.amountRequired = row.amount_required;
     wallet.amountRecieved = row.amount_recieved;
     wallet.amountPending = row.amount_pending;

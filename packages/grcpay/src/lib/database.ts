@@ -24,6 +24,13 @@ interface WalletsTable {
   address: string;
   recipient: string | null;
 
+  // Optional payout splits, JSON `[{ address, amount }]` with amount
+  // in halford as a decimal string (see lib/splits.ts). Each split is
+  // one more output of the payout tx, carved out of amount_required;
+  // the primary recipient gets the rest, less the network fee. A split
+  // below SPLIT_DUST stays with the primary. NULL means no splits.
+  splits: string | null;
+
   amount_required: bigint;
 
   // Settled balance — only counts txs that have reached

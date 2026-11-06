@@ -131,4 +131,87 @@ describe('WalletsCreatorService', () => {
     ).rejects.toThrow(/not a valid Gridcoin address/);
     expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
   });
+
+  describe('splits', () => {
+    const RECIPIENT = 'SBqubTKufqwpupnZsvzC3kSv9MCLrFXEUz';
+    const SPLIT_A = 'SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6i';
+    const SPLIT_B = 'SHpqN8xEjy2HHTnAGfgJjwFThuqzLbBs6j';
+    const SPLITS = [{ address: SPLIT_A, amount: 0.8 }, { address: SPLIT_B, amount: 1.5 }];
+
+    it('accepts a split amount Joi let through as a padded numeric string', async () => {
+      mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
+      const padded = [{ address: SPLIT_A, amount: ' 0.8 ' as unknown as number }];
+
+      const wallet = await service.createWallet(10, RECIPIENT, undefined, undefined, undefined, padded);
+
+      expect(wallet.splits).toEqual([{ address: SPLIT_A, halford: BigInt(80_000_000) }]);
+    });
+
+    it('persists the splits in halford and logs one row per split', async () => {
+      mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
+
+      const wallet = await service.createWallet(10, RECIPIENT, undefined, undefined, undefined, SPLITS);
+
+      expect(wallet.splits).toEqual([
+        { address: SPLIT_A, halford: BigInt(80_000_000) },
+        { address: SPLIT_B, halford: BigInt(150_000_000) },
+      ]);
+      const row = await db
+        .selectFrom('wallets')
+        .select(['splits', 'amount_required'])
+        .where('address', '=', 'Sgenerated_address_1234567890abcde')
+        .executeTakeFirstOrThrow();
+      expect(JSON.parse(row.splits!)).toEqual([
+        { address: SPLIT_A, amount: '80000000' },
+        { address: SPLIT_B, amount: '150000000' },
+      ]);
+      // Splits are carved out of amount_required, not added to it.
+      expect(row.amount_required).toBe(BigInt(1_000_000_000));
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split', newStatus: SPLIT_A, detail: '80000000 halford',
+      }));
+      expect(mockEmit).toHaveBeenCalledWith('log', expect.objectContaining({
+        action: 'split', newStatus: SPLIT_B, detail: '150000000 halford',
+      }));
+    });
+
+    it('stores null and logs no split without splits', async () => {
+      mockRpc.getNewAddress.mockResolvedValue('Sgenerated_address_1234567890abcde');
+
+      const wallet = await service.createWallet(10, RECIPIENT, undefined, undefined, undefined, []);
+
+      expect(wallet.splits).toEqual([]);
+      const row = await db
+        .selectFrom('wallets')
+        .select('splits')
+        .where('address', '=', 'Sgenerated_address_1234567890abcde')
+        .executeTakeFirstOrThrow();
+      expect(row.splits).toBeNull();
+      const actions = mockEmit.mock.calls.map((c) => c[1].action);
+      expect(actions).not.toContain('split');
+    });
+
+    it('validates every split address with the daemon before minting', async () => {
+      mockRpc.validateAddress
+        .mockResolvedValueOnce({ isvalid: true })
+        .mockResolvedValueOnce({ isvalid: true })
+        .mockResolvedValueOnce({ isvalid: false });
+
+      await expect(
+        service.createWallet(10, RECIPIENT, undefined, undefined, undefined, SPLITS),
+      ).rejects.toThrow(/Split address .* not a valid Gridcoin address/);
+      expect(mockRpc.validateAddress).toHaveBeenCalledWith(SPLIT_A);
+      expect(mockRpc.validateAddress).toHaveBeenCalledWith(SPLIT_B);
+      expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
+    });
+
+    it('refuses splits without a recipient to split with', async () => {
+      await expect(
+        service.createWallet(10, undefined, undefined, undefined, undefined, SPLITS),
+      ).rejects.toThrow(/require a recipient/);
+      expect(mockRpc.getNewAddress).not.toHaveBeenCalled();
+      const rows = await db.selectFrom('wallets').select('id').execute();
+      expect(rows).toHaveLength(0);
+    });
+  });
 });

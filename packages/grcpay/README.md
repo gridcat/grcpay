@@ -107,6 +107,7 @@ Create a new payment wallet.
 |-------|----------|-------------|
 | `amountRequired` | yes | Amount in GRC (must be > 0) |
 | `recipient` | no | Gridcoin address (34 chars, base58) to forward funds to. If omitted, funds stay in the generated wallet |
+| `splits` | no | Up to 10 extra payees, `[{ "address": "...", "amount": 0.8 }]` with amounts in GRC, paid in the same tx as `recipient`. Amounts are carved out of `amountRequired`, not added to it, and must leave at least `2 × MIN_FEE` for `recipient` (splits under `SPLIT_DUST` don't count). Requires `recipient`; each address must be unique and differ from it. A split under `SPLIT_DUST` (0.1 GRC) is ignored: `recipient` is paid as if it weren't there. The network fee comes off `recipient`'s output; a refund returns everything, splits included |
 
 **Response:** `201 Created` with the wallet resource including the generated `address`.
 
@@ -157,6 +158,7 @@ SQLite via [Kysely](https://kysely.dev) + [better-sqlite3](https://github.com/Wi
 | `id` | INTEGER (PK) | Auto-increment |
 | `address` | TEXT | Generated Gridcoin payment address |
 | `recipient` | TEXT, nullable | Where to forward funds |
+| `splits` | TEXT, nullable | JSON `[{ "address", "amount" }]` of extra payees, amounts in Halford as strings; NULL when none |
 | `amount_required` | INTEGER (bigint) | Required amount in Halford (1 GRC = 100,000,000 Halford) |
 | `amount_recieved` | INTEGER (bigint) | Confirmed amount received in Halford |
 | `amount_pending` | INTEGER (bigint) | Mempool/0-conf amount in Halford |
@@ -255,6 +257,7 @@ Loaded via `nconf` with priority: CLI args > environment variables > `config.jso
 | `JOBS_INTERVAL` | no | `10` | Background job loop interval in seconds |
 | `HALFORD` | no | `100000000` | GRC to Halford conversion factor |
 | `MIN_FEE` | no | `0.001` | Transaction fee in GRC |
+| `SPLIT_DUST` | no | `0.1` | Floor in GRC for a split's output; a smaller split is ignored and its amount goes to the primary recipient |
 | `COINGECKO_API_KEY` | no | -- | CoinGecko Demo API key, sent as `x-cg-demo-api-key` on rate lookups. Unset means keyless calls to the public API. |
 
 **Important:** `GRC_RPC_USER` and `GRC_RPC_PASSWORD` must be set as environment variables. They are not in `config.json`.
@@ -319,6 +322,7 @@ The service communicates with a Gridcoin wallet daemon via `gridcoin-rpc`:
 | `getReceivedByAddress(addr)` | `walletsBalanceUpdater` | Check how much GRC an address has received |
 | `setTXfee(amount)` | `walletFundedProcessorService`, `walletExpiredProcessorService` | Set transaction fee before sending |
 | `sendToAddress(addr, amount)` | `walletFundedProcessorService`, `walletExpiredProcessorService` | Send GRC to recipient/refund address |
+| `sendMany('', outputs)` | `walletFundedProcessorService` | One tx for a payout with several outputs: overpayment refund plus forward, or recipient plus splits |
 | `listTransactions('*', count, skip)` | `walletExpiredProcessorService` | Find incoming transactions to identify sender for refund |
 | `getRawTransaction(txid, true)` | `walletExpiredProcessorService` | Decode transaction to extract sender address from inputs |
 

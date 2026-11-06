@@ -82,6 +82,15 @@ const rows: Row[] = [
     refundTxField: 'null',
     notes: 'Wallet transitions to error for manual operator review.',
   },
+  {
+    scenario: 'One split (0.8 GRC)',
+    received: '10 GRC',
+    refunded: '—',
+    forwarded: '9.199 GRC',
+    refundTxField: 'null',
+    notes:
+      'The split address gets exactly 0.8 GRC in the same tx. The merchant gets required − splits − fee. A split under SPLIT_DUST (0.1 GRC) is ignored, and the merchant is paid as if the split did not exist.',
+  },
 ];
 
 export function FeeMath() {
@@ -182,6 +191,19 @@ export function FeeMath() {
           <code>error</code>
           {' '}
           so the merchant knows to look into it.
+        </Typography>
+        <Typography gutterBottom variant="body1" component="p">
+          With splits the same invariant holds for all payees together:
+          each split address receives exactly its
+          {' '}
+          <code>amount</code>
+          {' '}
+          and the merchant
+          {' '}
+          <code>amountRequired − sum(splits) − MIN_FEE</code>
+          , all from the one payout tx. The absorb-into-tip cases add
+          to the merchant&apos;s output only; the splits never change.
+          Refunds return the whole balance to the payer, splits included.
         </Typography>
 
         <Typography variant="h6" component="h3" sx={{ pt: 3, pb: 1 }}>
