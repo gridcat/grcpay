@@ -17,6 +17,7 @@ import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism';
 import { WalletsRepository } from '@/repositories/WalletsRepository';
 import { WalletEntity } from '@/entities/WalletEntity';
 import { SITE_HOST } from '@/components/Seo';
+import { trackEvent } from '@/lib/plausible';
 
 interface Props {
   onCreated: (wallet: WalletEntity) => void;
@@ -50,11 +51,14 @@ export function CreateWalletForm({ onCreated }: Props) {
         ...(trimmedRecipient ? { recipient: trimmedRecipient } : {}),
       });
       if (!wallet) {
+        trackEvent('Demo Step', { step: 'Create Failed' });
         setError('The API returned an empty response. Check the backend logs.');
         return;
       }
+      trackEvent('Demo Step', { step: 'Created' });
       onCreated(wallet);
     } catch (err) {
+      trackEvent('Demo Step', { step: 'Create Failed' });
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(`Failed to create wallet: ${message}`);
     } finally {

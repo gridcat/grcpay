@@ -16,6 +16,7 @@ import {
   MenuGroup,
 } from './constants';
 import { NextMuiLink } from '../NextMuiLink';
+import { plausibleClass } from '@/lib/plausible';
 
 const itemHorzPadding = 1;
 const gutter = 2;
@@ -154,6 +155,7 @@ function GroupItem({ group, isActive, entryKey }: GroupItemProps) {
             component={Link}
             href={child.href}
             onClick={handleClose}
+            className={plausibleClass('Nav Click', { item: child.label })}
           >
             {child.label}
           </MenuItem>
@@ -198,7 +200,12 @@ export function NavMenuDesktop() {
                 key={key}
                 className={isActive ? 'itemActive' : undefined}
               >
-                <NextMuiLink href={entry.href}>{entry.label}</NextMuiLink>
+                <NextMuiLink
+                  href={entry.href}
+                  className={plausibleClass('Nav Click', { item: entry.label })}
+                >
+                  {entry.label}
+                </NextMuiLink>
               </NavItem>
             );
           })}

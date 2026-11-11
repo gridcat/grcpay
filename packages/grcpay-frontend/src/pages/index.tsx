@@ -18,6 +18,7 @@ import { Seo, SITE_NAME, SITE_URL } from '@/components/Seo';
 import { PageWrapper } from '@/components/PageWrapper';
 import { ScrollTopFab } from '@/components/ScrollTopFab/ScrollTopFab';
 import { withThemeDataServerSide } from '@/lib/modeDataServer';
+import { plausibleClass } from '@/lib/plausible';
 import {
   AUTHOR_GRIDCAT, faqPage, ORG_ID, PUBLISHER_ORG, type FaqEntry,
 } from '@/lib/structuredData';
@@ -136,6 +137,7 @@ export default function Home() {
               <Button
                 component={Link}
                 href="/demo"
+                className={plausibleClass('CTA Click', { cta: 'Hero Demo' })}
                 variant="contained"
                 color="primary"
                 size="large"
@@ -145,6 +147,7 @@ export default function Home() {
               <Button
                 component={Link}
                 href="/developers"
+                className={plausibleClass('CTA Click', { cta: 'Hero Docs' })}
                 variant="outlined"
                 color="primary"
                 size="large"
@@ -158,7 +161,12 @@ export default function Home() {
             {features.map((f) => (
               <Grid key={f.href} size={{ xs: 12, md: 4 }}>
                 <Card variant="outlined" sx={{ height: '100%' }}>
-                  <CardActionArea component={Link} href={f.href} sx={{ height: '100%' }}>
+                  <CardActionArea
+                    component={Link}
+                    href={f.href}
+                    className={plausibleClass('CTA Click', { cta: `Card ${f.title}` })}
+                    sx={{ height: '100%' }}
+                  >
                     <CardContent>
                       <Typography variant="h6" component="h2">
                         {f.title}

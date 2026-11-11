@@ -10,6 +10,7 @@ import {
 import { useInterval } from '@/hooks';
 import { WalletsRepository } from '@/repositories/WalletsRepository';
 import { WalletEntity, WalletStatus, formatGrc } from '@/entities/WalletEntity';
+import { plausibleClass, trackEvent } from '@/lib/plausible';
 
 interface Props {
   initialWallet: WalletEntity;
@@ -104,6 +105,9 @@ export function WalletStatusPanel({ initialWallet, onPersist, onReset }: Props) 
         && latest.confirmationsRequired === wallet.confirmationsRequired
       ) {
         return;
+      }
+      if (latest.status !== wallet.status) {
+        trackEvent('Demo Step', { step: 'Status', status: latest.status });
       }
       setWallet(latest);
     } catch {
@@ -324,6 +328,7 @@ export function WalletStatusPanel({ initialWallet, onPersist, onReset }: Props) 
             <Button
               variant="outlined"
               color="warning"
+              className={plausibleClass('Demo Step', { step: 'Cancel' })}
               onClick={async () => {
                 const { token } = wallet;
                 if (!token) return;
@@ -348,7 +353,11 @@ export function WalletStatusPanel({ initialWallet, onPersist, onReset }: Props) 
               Cancel wallet
             </Button>
           )}
-          <Button variant="outlined" onClick={onReset}>
+          <Button
+            variant="outlined"
+            onClick={onReset}
+            className={plausibleClass('Demo Step', { step: 'Reset' })}
+          >
             Create another wallet
           </Button>
         </Stack>
