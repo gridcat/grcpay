@@ -108,6 +108,16 @@ class RpcBreaker {
 
 const breaker = new RpcBreaker();
 
+// Outcome of the most recent wallet RPC; null until the first call
+// settles. Surfaced on /status, since the HTTP port is up whether or not
+// the daemon answers.
+let lastRpcOk: boolean | null = null;
+let lastRpcOkAt: Date | null = null;
+
+export function getWalletHealth(): { ok: boolean; lastSuccessAt: Date | null } {
+  return { ok: lastRpcOk === true, lastSuccessAt: lastRpcOkAt };
+}
+
 const rawRpc = new GridcoinRPC({
   port: config.GRC_RPC_PORT,
   host: config.GRC_RPC_HOST,
@@ -137,10 +147,13 @@ export const rpc = new Proxy(rawRpc, {
       return withTimeout(result as Promise<unknown>, RPC_TIMEOUT_MS, `Gridcoin RPC ${method}`)
         .then((ok) => {
           breaker.recordSuccess();
+          lastRpcOk = true;
+          lastRpcOkAt = new Date();
           return ok;
         })
         .catch((err) => {
           breaker.recordFailure();
+          lastRpcOk = false;
           throw err;
         });
     };

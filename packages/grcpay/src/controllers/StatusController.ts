@@ -4,6 +4,7 @@ import { ErrorModel } from '../models/Error';
 import { StatusPresenter } from '../presenters/status.presenter';
 import { PresenterInterface } from '../presenters/types';
 import { RatesService } from '../services/rates/ratesService';
+import { getWalletHealth } from '../lib/gridcoin';
 
 export interface ServiceInfo {
   name: string,
@@ -32,10 +33,16 @@ export class StatusController {
       // Rates health rides along here rather than on its own endpoint:
       // /status is what the control panel already polls, and a stalled
       // CoinGecko feed doesn't make the service itself unhealthy, so
-      // this stays a 200 with a flag rather than flipping to 5xx.
+      // this stays a 200 with a flag rather than flipping to 5xx. The
+      // wallet flag follows the same rule: rates and status keep serving
+      // while the daemon is away, so it's not a reason to fail the probe.
       this.res
         .status(StatusCodes.OK)
-        .send(this.presenter.render({ ...serviceInfo, rates: RatesService.getHealth() }));
+        .send(this.presenter.render({
+          ...serviceInfo,
+          rates: RatesService.getHealth(),
+          wallet: getWalletHealth(),
+        }));
     } else {
       this.res
         .status(StatusCodes.INTERNAL_SERVER_ERROR)

@@ -51,9 +51,10 @@ async function main(): Promise<void> {
   // without a separate migration step.
   await migrateToLatest();
 
-  await initConnections();
-
+  // Listen BEFORE waiting on the wallet.
   startServer();
+
+  await initConnections();
 
   DbLogService.registerEventListener();
 

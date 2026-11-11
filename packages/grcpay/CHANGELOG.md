@@ -1,3 +1,19 @@
+# [grcpay-v1.1.4](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.3...grcpay-v1.1.4) (2026-11-03)
+
+
+### Bug Fixes
+
+* bump next to 16.4.4 and patch body-parser, follow-redirects, joi, qs ([c721a23](https://github.com/gridcat/grcpay/commit/c721a236827f5a6b2e7ef9baa828c1d06a877027))
+
+# [grcpay-v1.1.3](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.2...grcpay-v1.1.3) (2026-10-13)
+
+
+### Bug Fixes
+
+* dependencies ([9af6f5f](https://github.com/gridcat/grcpay/commit/9af6f5f0ab98695bebd784c1528cde0d7faf34bc))
+* fix dependencies ([5b9ad2e](https://github.com/gridcat/grcpay/commit/5b9ad2e05b0113e0f0b5c2dbc60b4d7e648a73db))
+* start http before the connection to the wallet to not to stuck ([5d459a2](https://github.com/gridcat/grcpay/commit/5d459a2fa75827bbb378f65deac054fc71440910))
+
 # [grcpay-v1.1.2](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.1...grcpay-v1.1.2) (2026-09-29)
 
 
