@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography, Box, Alert } from '@mui/material';
 import { NextMuiLink } from '@/components/NextMuiLink';
+import { plausibleClass } from '@/lib/plausible';
 
 export function Install() {
   return (
@@ -21,7 +22,10 @@ export function Install() {
         <Alert severity="info" sx={{ mt: 2 }}>
           The plugin download URL is
           {' '}
-          <NextMuiLink href="https://TBD-wordpress-plugin-url/">
+          <NextMuiLink
+            href="https://TBD-wordpress-plugin-url/"
+            className={plausibleClass('Plugin Download', { plugin: 'WooCommerce' })}
+          >
             TBD-wordpress-plugin-url
           </NextMuiLink>
           . Replace this once the plugin is published.

@@ -284,7 +284,7 @@ jobs:
           command: |
             mkdir -p /caches
             cd ~/app/packages/grcpay && docker save -o /caches/grcpay.tar app
-      - deploy:
+      - run:
           name: Push application Docker image
           command: |
             cd ~/app/packages/grcpay
@@ -327,7 +327,7 @@ jobs:
           command: |
             mkdir -p /caches
             cd ~/app/packages/grcpay-frontend && docker save -o /caches/grcpay-frontend.tar app
-      - deploy:
+      - run:
           name: Push application Docker image
           command: |
             cd ~/app/packages/grcpay-frontend
@@ -377,7 +377,7 @@ jobs:
           command: |
             mkdir -p /caches
             cd ~/app/packages/grcpay-frontend && docker save -o /caches/grcpay-frontend-testnet.tar app-testnet
-      - deploy:
+      - run:
           name: Push testnet application Docker image
           command: |
             cd ~/app/packages/grcpay-frontend

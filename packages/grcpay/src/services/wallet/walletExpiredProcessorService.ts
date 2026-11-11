@@ -6,6 +6,7 @@ import { log } from '../../lib/log';
 import { getEventEmitter } from '../../lib/event';
 import { DbLogMessage } from '../dbLog/dbLogService';
 import { findAllSenders } from './senderLookup';
+import { recordTxFee } from './txFee';
 import { canRetryRefund } from '../../lib/refundBackoff';
 import { grc2halford, halford2grc, MIN_FEE_HALFORD as minFeeHalford } from '../../lib/nomination';
 import { TimeoutError } from '../../lib/withTimeout';
@@ -237,6 +238,8 @@ export class WalletExpiredProcessorServiceClass {
           action: 'expired_refund',
           newStatus: tx,
         });
+        // eslint-disable-next-line no-await-in-loop
+        await recordTxFee(this.grcRpc, Number(wallet.id), tx);
       } catch (e) {
         // Timeout-after-commit: daemon may have committed this send
         // even though the RPC reply was lost. We can't safely call

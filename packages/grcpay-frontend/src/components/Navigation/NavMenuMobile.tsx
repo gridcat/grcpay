@@ -19,6 +19,7 @@ import { useRouter } from 'next/router';
 import { styled } from '@mui/material/styles';
 import { useRouteNavigating } from '@/hooks';
 import { LOGO_PATH } from '@/lib/network';
+import { plausibleClass } from '@/lib/plausible';
 import {
   menuItems,
   isMenuGroup,
@@ -64,7 +65,11 @@ function LeafLink({
 }: LeafLinkProps) {
   const isCurrent = currentPath === leaf.href;
   return (
-    <Link href={leaf.href} passHref>
+    <Link
+      href={leaf.href}
+      passHref
+      className={plausibleClass('Nav Click', { item: leaf.label })}
+    >
       <ButtonComponent
         variant={isCurrent ? 'contained' : 'text'}
         disableElevation
