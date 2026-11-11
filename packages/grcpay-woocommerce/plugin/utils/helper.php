@@ -136,11 +136,14 @@ class Helper
     /**
      * Get GRC exchange rate directly from CoinGecko.
      * Fetch-only; caller owns caching. Throws on any failure.
+     *
+     * Uses the coin endpoint, as grcpay does: CoinGecko blocked keyless
+     * `simple/price` calls for a while in 2026 and left this one open.
      */
     private static function getRateViaCoinGecko($currency)
     {
-        $currencyId = 'gridcoin-research';
-        $url = self::$coinGeckoApiBase . "simple/price?ids={$currencyId}&vs_currencies={$currency}";
+        $url = self::$coinGeckoApiBase . 'coins/gridcoin-research?localization=false&tickers=false'
+            . '&market_data=true&community_data=false&developer_data=false&sparkline=false';
         $response = wp_remote_get($url, [
             'headers' => ['Accept' => 'application/json'],
             'timeout' => 10,
@@ -150,12 +153,12 @@ class Helper
             throw new Exception('Failed to fetch GRC rate from CoinGecko: ' . $response->get_error_message());
         }
 
-        $rates = json_decode(wp_remote_retrieve_body($response), true);
-        if (empty($rates[$currencyId][$currency])) {
+        $coin = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($coin['market_data']['current_price'][$currency])) {
             throw new Exception("Unable to fetch GRC rate for {$currency}");
         }
 
-        return (float)$rates[$currencyId][$currency];
+        return (float)$coin['market_data']['current_price'][$currency];
     }
 
     /**
