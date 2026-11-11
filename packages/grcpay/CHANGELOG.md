@@ -1,3 +1,11 @@
+# [grcpay-v1.1.5](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.4...grcpay-v1.1.5) (2026-11-11)
+
+
+### Bug Fixes
+
+* clear the production audit for grcpay and grcpay-frontend (proxy-addr, sharp, source-map-js) ([1dfed3c](https://github.com/gridcat/grcpay/commit/1dfed3cbfb9fc28ecdf91cca19c10daea52b0109))
+* record the fee the daemon actually charges on every payout ([86e11bd](https://github.com/gridcat/grcpay/commit/86e11bddbb1fbd6eca96945efe8df9d979088905))
+
 # [grcpay-v1.1.4](https://github.com/gridcat/grcpay/compare/grcpay-v1.1.3...grcpay-v1.1.4) (2026-11-03)
 
 
