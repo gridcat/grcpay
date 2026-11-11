@@ -1,3 +1,17 @@
+# [grcpay-frontend-v1.4.0](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.4...grcpay-frontend-v1.4.0) (2026-11-11)
+
+
+### Bug Fixes
+
+* clear the production audit for grcpay and grcpay-frontend (proxy-addr, sharp, source-map-js) ([1dfed3c](https://github.com/gridcat/grcpay/commit/1dfed3cbfb9fc28ecdf91cca19c10daea52b0109))
+* **grcpay-frontend:** drop the unused gridcoinstats.eu dns-prefetch ([7b1a847](https://github.com/gridcat/grcpay/commit/7b1a847b03d75818fcc8c6001bf9933a23a2a283))
+* **grcpay-frontend:** load Plausible first-party ([17fc562](https://github.com/gridcat/grcpay/commit/17fc5629dbfbb8ce8fda8bcb50ffd4d82423a8ad))
+
+
+### Features
+
+* **grcpay-frontend:** track navigation, CTAs, demo steps, plugin downloads, code copies and 404s in Plausible ([58a55d6](https://github.com/gridcat/grcpay/commit/58a55d6f60fa4ab92430b67c6eab3b5e9944c66e))
+
 # [grcpay-frontend-v1.3.4](https://github.com/gridcat/grcpay/compare/grcpay-frontend-v1.3.3...grcpay-frontend-v1.3.4) (2026-11-03)
 
 
